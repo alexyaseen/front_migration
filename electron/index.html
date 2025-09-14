@@ -144,6 +144,10 @@
       setStatus('running','Running');
       showToast('Migration started', 'info');
       try {
+        // Prevent duplicate listeners across runs
+        if (window.electronAPI?.clearMigrationListeners) {
+          window.electronAPI.clearMigrationListeners();
+        }
         window.electronAPI.onMigrationData(chunk => append(chunk));
         window.electronAPI.onMigrationEnd(({ code }) => {
           append('\n\n[Process exited with code ' + code + ']');
