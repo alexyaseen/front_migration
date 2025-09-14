@@ -66,11 +66,8 @@ body {
 
 .grid {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: 1fr; /* Always single column */
   gap: 16px;
-}
-@media (min-width: 920px) {
-  .grid { grid-template-columns: 1fr 1fr; }
 }
 
 .card {
