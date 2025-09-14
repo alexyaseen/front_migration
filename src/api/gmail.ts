@@ -64,7 +64,11 @@ export class GmailClient {
     throw lastError;
   }
 
-  static async create(credentialsPath: string, tokenPath: string): Promise<GmailClient> {
+  static async create(
+    credentialsPath: string,
+    tokenPath: string,
+    readonly: boolean = false
+  ): Promise<GmailClient> {
     let auth: OAuth2Client;
 
     try {
@@ -72,7 +76,7 @@ export class GmailClient {
       const token = JSON.parse(tokenContent);
       const credentialsContent = await fs.readFile(credentialsPath, 'utf-8');
       const credentials = JSON.parse(credentialsContent);
-      
+
       auth = new google.auth.OAuth2(
         credentials.installed.client_id,
         credentials.installed.client_secret,
@@ -81,14 +85,17 @@ export class GmailClient {
       auth.setCredentials(token);
     } catch (error) {
       console.log('Token not found or invalid, authenticating...');
+      const scopes = readonly
+        ? ['https://www.googleapis.com/auth/gmail.readonly']
+        : [
+            'https://www.googleapis.com/auth/gmail.modify',
+            'https://www.googleapis.com/auth/gmail.labels',
+          ];
       auth = await authenticate({
-        scopes: [
-          'https://www.googleapis.com/auth/gmail.modify',
-          'https://www.googleapis.com/auth/gmail.labels',
-        ],
+        scopes,
         keyfilePath: credentialsPath,
       });
-      
+
       const token = auth.credentials;
       await fs.writeFile(tokenPath, JSON.stringify(token, null, 2));
       console.log('Token saved to', tokenPath);
