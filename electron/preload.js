@@ -7,6 +7,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   deleteGoogleCreds: () => ipcRenderer.invoke('delete-google-creds'),
   getGoogleTokenInfo: () => ipcRenderer.invoke('get-google-token-info'),
   deleteGoogleToken: () => ipcRenderer.invoke('delete-google-token'),
+  openReports: () => ipcRenderer.invoke('open-reports'),
+  openExternal: (url) => ipcRenderer.invoke('open-external', url),
   runMigration: (opts) => ipcRenderer.invoke('run-migration', opts),
   cancelMigration: () => ipcRenderer.invoke('cancel-migration'),
   clearMigrationListeners: () => {

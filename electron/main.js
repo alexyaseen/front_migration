@@ -1,13 +1,23 @@
-const { app, BrowserWindow, ipcMain, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, nativeImage, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
+const { pathToFileURL } = require('url');
 
 let mainWindow = null;
 let currentChild = null;
 const roundedIconPath = path.join(__dirname, 'logo-rounded.png');
 const defaultIconPath = path.join(__dirname, 'logo.png');
 const iconPath = fs.existsSync(roundedIconPath) ? roundedIconPath : defaultIconPath;
+
+function getReportsDir() {
+  try {
+    if (app.isPackaged) {
+      return path.join(app.getPath('userData'), 'reports');
+    }
+  } catch {}
+  return path.join(__dirname, '..', 'reports');
+}
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -106,6 +116,10 @@ ipcMain.handle('run-migration', (_event, opts = {}) => {
   return new Promise((resolve, reject) => {
     const script = path.join(__dirname, '..', 'dist', 'index.js');
     const env = { ...process.env, ELECTRON_RUN_AS_NODE: '1' };
+    // Ensure reports dir exists and pass to child for packaged runs
+    const reportsDir = getReportsDir();
+    try { fs.mkdirSync(reportsDir, { recursive: true }); } catch {}
+    env.REPORTS_DIR = reportsDir;
     // Apply options
     if (typeof opts.dryRun === 'boolean') {
       env.DRY_RUN = String(opts.dryRun);
@@ -145,6 +159,62 @@ ipcMain.handle('cancel-migration', () => {
     try { currentChild.kill('SIGTERM'); } catch {}
   }
   return { ok: true };
+});
+
+ipcMain.handle('open-reports', async () => {
+  const reportsDir = getReportsDir();
+  try {
+    await fs.promises.mkdir(reportsDir, { recursive: true });
+  } catch (e) {
+    return { ok: false, error: e?.message || String(e) };
+  }
+
+  // Try Electron shell.openPath first
+  try {
+    const result = await shell.openPath(reportsDir);
+    if (!result) return { ok: true, path: reportsDir };
+  } catch (e) {
+    // continue to fallbacks
+  }
+
+  // Fallback: openExternal file:// URL
+  try {
+    const url = pathToFileURL(reportsDir).toString();
+    await shell.openExternal(url);
+    return { ok: true, path: reportsDir };
+  } catch (e) {
+    // continue to system command fallback
+  }
+
+  // Final fallback: spawn platform-specific command
+  try {
+    await new Promise((resolve, reject) => {
+      let cmd, args;
+      if (process.platform === 'darwin') {
+        cmd = 'open'; args = [reportsDir];
+      } else if (process.platform === 'win32') {
+        cmd = 'explorer'; args = [reportsDir];
+      } else {
+        cmd = 'xdg-open'; args = [reportsDir];
+      }
+      const child = spawn(cmd, args, { stdio: 'ignore' });
+      child.on('error', reject);
+      child.on('exit', code => code === 0 ? resolve() : reject(new Error(cmd + ' exited with ' + code)));
+    });
+    return { ok: true, path: reportsDir };
+  } catch (e) {
+    return { ok: false, error: e?.message || String(e) };
+  }
+});
+
+ipcMain.handle('open-external', async (_e, url) => {
+  try {
+    if (typeof url !== 'string' || !url.startsWith('http')) throw new Error('Invalid URL');
+    await shell.openExternal(url);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e?.message || String(e) };
+  }
 });
 
 app.on('window-all-closed', () => {

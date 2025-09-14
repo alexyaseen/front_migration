@@ -321,7 +321,9 @@ class FrontToGmailMigrator {
 
   private async writeCsvReport() {
     try {
-      const dir = path.resolve(process.cwd(), 'reports');
+      const dir = process.env.REPORTS_DIR
+        ? path.resolve(process.env.REPORTS_DIR)
+        : path.resolve(process.cwd(), 'reports');
       await fs.mkdir(dir, { recursive: true });
       const filename = `migration-report-${new Date().toISOString().replace(/[:.]/g, '-')}.csv`;
       const filePath = path.join(dir, filename);

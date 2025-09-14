@@ -109,6 +109,14 @@ label { font-size: 12px; color: var(--muted); }
 }
 .input:focus, .textarea:focus, .select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(107,138,253,0.15); }
 .textarea { resize: vertical; min-height: 90px; }
+.textarea.dragover { border-color: var(--accent-2); box-shadow: 0 0 0 3px rgba(122,92,255,0.2); }
+.textarea.dropzone {
+  border-style: dashed;
+  background: #0e131b;
+}
+.textarea[readonly] {
+  cursor: default;
+}
 .select { appearance: none; -webkit-appearance: none; -moz-appearance: none; }
 .select:hover { filter: brightness(1.05); }
 .select:active { filter: brightness(0.98); }
@@ -184,7 +192,7 @@ input[type="checkbox"]:focus-visible { outline: 2px solid var(--accent-2); outli
 /* Toasts */
 .toasts {
   position: fixed;
-  right: 16px;
+  left: 16px;
   bottom: 16px;
   display: grid;
   gap: 10px;
@@ -252,7 +260,7 @@ input[type="checkbox"]:focus-visible { outline: 2px solid var(--accent-2); outli
 
 /* Logs panel layout */
 .log-panel { display: flex; flex-direction: column; gap: 10px; }
-.log-actions { display: flex; justify-content: flex-end; }
+.log-actions { display: flex; justify-content: flex-end; gap: 10px; }
 
 /* Run options box */
 .option-box {
@@ -318,6 +326,7 @@ input[type="checkbox"]:focus-visible { outline: 2px solid var(--accent-2); outli
   cursor: default;
   position: relative;
 }
+.info-icon.clickable { cursor: pointer; }
 .info-icon:hover {
   color: var(--text);
   border-color: var(--accent);
@@ -345,7 +354,7 @@ input[type="checkbox"]:focus-visible { outline: 2px solid var(--accent-2); outli
   min-width: 200px;
   opacity: 0;
   visibility: hidden;
-  pointer-events: none;
+  pointer-events: auto; /* allow hovering over tooltip itself */
   transition: opacity 120ms ease, transform 120ms ease;
   z-index: 10000;
 }
@@ -370,6 +379,60 @@ input[type="checkbox"]:focus-visible { outline: 2px solid var(--accent-2); outli
   opacity: 1;
   visibility: visible;
   transform: translate(-50%, 0);
+}
+
+/* DOM-based tooltip bubble for complex content (Google creds) */
+.info-icon.with-bubble { position: relative; }
+.info-icon.with-bubble::before { content: none !important; display: none !important; }
+/* Hover bridge between icon and bubble to prevent flicker */
+.info-icon.with-bubble::after {
+  content: '' !important;
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 320px; /* approximate bubble width */
+  height: 8px;  /* small strip to bridge the gap */
+  background: transparent;
+  pointer-events: auto;
+  z-index: 9999; /* below bubble (which is 10000) */
+}
+.info-icon.with-bubble .tip-bubble {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 50%;
+  transform: translate(-50%, -4px);
+  background: #0f141c;
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.35;
+  padding: 8px 10px;
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  width: max-content;
+  max-width: 360px;
+  min-width: 240px;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: auto;
+  transition: opacity 120ms ease, transform 120ms ease;
+  z-index: 10000;
+}
+.info-icon.with-bubble:hover .tip-bubble,
+.info-icon.with-bubble:focus .tip-bubble,
+.info-icon.with-bubble .tip-bubble:hover {
+  opacity: 1;
+  visibility: visible;
+  transform: translate(-50%, 0);
+}
+.info-icon.with-bubble .tip-url {
+  margin-top: 6px;
+  color: #78a6ff;
+  text-decoration: underline;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  word-break: break-all;
+  cursor: pointer;
 }
 
 /* Modal */
