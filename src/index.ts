@@ -1,11 +1,12 @@
 import { FrontClient } from './api/front';
-import { GmailClient } from './api/gmail';
+import { GmailClient, createGmailClientWithKeychain } from './api/gmail';
 import { loadConfig, Config } from './config';
 import { ConversationMapper, MigrationItem, STATUS_LABEL_ARCHIVED, STATUS_LABEL_INBOX } from './utils/mapper';
 import { Logger } from './utils/logger_ascii';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as readline from 'readline';
+import { SecureStore } from './utils/secureStore';
 
 interface MigrationStats {
   total: number;
@@ -62,11 +63,8 @@ class FrontToGmailMigrator {
 
   async initialize() {
     this.logger.info('Initializing Gmail client...');
-    this.gmailClient = await GmailClient.create(
-      this.config.google.credentialsPath,
-      this.config.google.tokenPath,
-      this.config.migration.dryRun
-    );
+    const store = new SecureStore();
+    this.gmailClient = await createGmailClientWithKeychain(store, this.config.migration.dryRun);
     this.logger.info('Gmail client initialized successfully');
   }
 
@@ -392,29 +390,28 @@ if (require.main === module) {
 
 // --------------- Interactive Setup Helpers ---------------
 async function ensureInteractiveSetup() {
-  // 1) Front API token: try env, then front_token.json, else prompt
+  const store = new SecureStore();
+  // 1) Front API token: try env, then keychain, else prompt
   if (!process.env.FRONT_API_KEY) {
-    const frontTokenPath = path.resolve(process.cwd(), 'front_token.json');
-    const token = await readFrontToken(frontTokenPath);
-    if (token) {
-      process.env.FRONT_API_KEY = token;
+    const saved = await store.getFrontToken();
+    if (saved) {
+      process.env.FRONT_API_KEY = saved;
     } else {
       const entered = await prompt(`Enter your Front API token (read-only): `);
       if (!entered || !entered.trim()) {
         throw new Error('Front API token is required to proceed.');
       }
-      process.env.FRONT_API_KEY = entered.trim();
-      await fs.writeFile(frontTokenPath, JSON.stringify({ token: process.env.FRONT_API_KEY }, null, 2), 'utf8');
-      console.log(`[INFO] Saved Front token to ${frontTokenPath}`);
+      const token = entered.trim();
+      await store.setFrontToken(token);
+      process.env.FRONT_API_KEY = token;
+      console.log(`[INFO] Front token saved to system keychain`);
     }
   }
 
-  // 2) Google credentials: if missing, prompt to paste JSON and write file
-  const credsPath = process.env.GOOGLE_CREDENTIALS_PATH || './credentials.json';
-  const absCredsPath = path.isAbsolute(credsPath) ? credsPath : path.resolve(process.cwd(), credsPath);
-  const exists = await fileExists(absCredsPath);
-  if (!exists) {
-    console.log('Google credentials file not found.');
+  // 2) Google credentials: if missing in keychain, prompt to paste JSON and save
+  const creds = await store.getGoogleCredentials();
+  if (!creds) {
+    console.log('Google credentials not found in keychain.');
     console.log('Paste your OAuth 2.0 credentials JSON (Desktop application) below, then press Enter:');
     const json = await promptMultiline('JSON> ');
     let parsed: any;
@@ -426,27 +423,8 @@ async function ensureInteractiveSetup() {
     } catch (e) {
       throw new Error(`Invalid JSON for Google credentials: ${(e as Error).message}`);
     }
-    await fs.writeFile(absCredsPath, JSON.stringify(parsed, null, 2), 'utf8');
-    console.log(`[INFO] Wrote Google credentials to ${absCredsPath}`);
-  }
-}
-
-async function readFrontToken(filePath: string): Promise<string | null> {
-  try {
-    const data = await fs.readFile(filePath, 'utf8');
-    const json = JSON.parse(data);
-    return typeof json?.token === 'string' ? json.token : null;
-  } catch {
-    return null;
-  }
-}
-
-async function fileExists(p: string): Promise<boolean> {
-  try {
-    await fs.access(p);
-    return true;
-  } catch {
-    return false;
+    await store.setGoogleCredentials(parsed);
+    console.log(`[INFO] Google credentials saved to system keychain`);
   }
 }
 

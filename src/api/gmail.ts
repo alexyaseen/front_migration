@@ -4,6 +4,12 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { authenticate } from '@google-cloud/local-auth';
 import pLimit from 'p-limit';
+import { createServer } from 'http';
+import { AddressInfo } from 'net';
+import { SecureStore, GoogleToken } from '../utils/secureStore';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+const execAsync = promisify(exec);
 
 export interface GmailLabel {
   id: string;
@@ -291,5 +297,114 @@ export class GmailClient {
 
   async archiveMessages(messageIds: string[]): Promise<void> {
     await this.batchModifyMessages(messageIds, [], ['INBOX']);
+  }
+}
+
+// Keychain-based Gmail client factory and helpers (no file storage)
+export async function createGmailClientWithKeychain(store: SecureStore, readonly: boolean = false): Promise<GmailClient> {
+  const creds = await store.getGoogleCredentials();
+  if (!creds) {
+    throw new Error('Google credentials not found in keychain. Run the tool to complete interactive setup.');
+  }
+
+  const redirectUri = await getLoopbackRedirectUri();
+  const oAuth2Client = new google.auth.OAuth2(
+    creds.installed.client_id,
+    creds.installed.client_secret,
+    redirectUri,
+  );
+
+  const saved = await store.getGoogleToken();
+  if (saved) {
+    oAuth2Client.setCredentials(saved as any);
+    return new GmailClient(oAuth2Client);
+  }
+
+  const scopes = readonly
+    ? ['https://www.googleapis.com/auth/gmail.readonly']
+    : [
+        'https://www.googleapis.com/auth/gmail.modify',
+        'https://www.googleapis.com/auth/gmail.labels',
+      ];
+
+  const { code } = await runLoopbackOAuth(oAuth2Client, scopes, redirectUri);
+  const { tokens } = await oAuth2Client.getToken(code);
+  oAuth2Client.setCredentials(tokens);
+  await store.setGoogleToken(tokens as GoogleToken);
+  return new GmailClient(oAuth2Client);
+}
+
+async function getLoopbackRedirectUri(): Promise<string> {
+  const server = createServer();
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const addr = server.address() as AddressInfo;
+  const url = `http://127.0.0.1:${addr.port}/oauth2callback`;
+  server.close();
+  return url;
+}
+
+async function runLoopbackOAuth(
+  oAuth2Client: OAuth2Client,
+  scopes: string[],
+  redirectUri: string,
+): Promise<{ code: string }> {
+  const authUrl = oAuth2Client.generateAuthUrl({
+    access_type: 'offline',
+    scope: scopes,
+    prompt: 'consent',
+    include_granted_scopes: true,
+    redirect_uri: redirectUri,
+  });
+
+  const server = createServer((req, res) => {
+    if (!req.url) return;
+    const u = new URL(req.url, redirectUri);
+    if (u.pathname !== '/oauth2callback') {
+      res.statusCode = 404;
+      res.end('Not found');
+      return;
+    }
+    const code = u.searchParams.get('code');
+    if (!code) {
+      res.statusCode = 400;
+      res.end('Missing code');
+      return;
+    }
+    res.statusCode = 200;
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.end('<html><body><h3>Authorization complete. You can close this window.</h3></body></html>');
+    (server as any)._code = code;
+    setImmediate(() => server.close());
+  });
+  await new Promise<void>((resolve) => server.listen(Number(new URL(redirectUri).port), '127.0.0.1', resolve));
+
+  await openInBrowser(authUrl);
+
+  const code: string = await new Promise((resolve, reject) => {
+    const onClose = () => {
+      const c = (server as any)._code;
+      if (c) resolve(c);
+      else reject(new Error('OAuth flow did not capture an authorization code.'));
+    };
+    server.on('close', onClose);
+    server.on('error', (err) => reject(err));
+  });
+
+  return { code };
+}
+
+async function openInBrowser(url: string): Promise<void> {
+  try {
+    await execAsync(`open "${url}"`);
+  } catch {
+    try {
+      await execAsync(`xdg-open "${url}"`);
+    } catch {
+      try {
+        await execAsync(`start "" "${url}"`);
+      } catch {
+        console.log('Open this URL in your browser to continue:', url);
+      }
+    }
   }
 }
