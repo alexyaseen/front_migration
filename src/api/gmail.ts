@@ -302,6 +302,11 @@ export class GmailClient {
 
 // Keychain-based Gmail client factory and helpers (no file storage)
 export async function createGmailClientWithKeychain(store: SecureStore, readonly: boolean = false): Promise<GmailClient> {
+  // Log selected Gmail scopes based on mode for operator visibility
+  const scopesMsg = readonly
+    ? 'https://www.googleapis.com/auth/gmail.readonly'
+    : 'https://www.googleapis.com/auth/gmail.modify, https://www.googleapis.com/auth/gmail.labels';
+  console.log(`[INFO] [Gmail] Using scopes: ${scopesMsg}`);
   const creds = await store.getGoogleCredentials();
   if (!creds) {
     throw new Error('Google credentials not found in keychain. Run the tool to complete interactive setup.');

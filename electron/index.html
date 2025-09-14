@@ -2,43 +2,76 @@
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>Front to Gmail Migration</title>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';" />
+  <title>Front → Gmail Migration</title>
+  <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
-  <h1>Front to Gmail Migration</h1>
-  <section>
-    <h3>Secrets (first run)</h3>
-    <label>
-      Front API Token:
-      <input id="frontToken" type="password" placeholder="Front API Token" style="width: 100%" />
-    </label>
-    <br />
-    <label>
-      Google OAuth credentials.json (paste full JSON):
-      <textarea id="googleCreds" rows="6" style="width: 100%" placeholder='{"installed": { ... }}'></textarea>
-    </label>
-    <br />
-    <button id="saveSecrets">Save Secrets</button>
-    <span id="saveStatus"></span>
-  </section>
-  <hr />
-  <section>
-    <button id="run">Run Migration</button>
-    <button id="cancel" disabled>Stop</button>
-    <label style="margin-left: 12px;">
-      <input id="dryRun" type="checkbox" checked /> Dry Run
-    </label>
-    <label style="margin-left: 12px;">
-      Log Level:
-      <select id="logLevel">
-        <option value="error">error</option>
-        <option value="warn">warn</option>
-        <option value="info" selected>info</option>
-        <option value="debug">debug</option>
-      </select>
-    </label>
-  </section>
-  <pre id="output" style="white-space: pre-wrap; border: 1px solid #ccc; padding: 8px; height: 300px; overflow: auto;"></pre>
+  <div class="app">
+    <nav class="nav">
+      <div class="brand">
+        <div class="logo"></div>
+        <div>
+          <div class="title">Front → Gmail Migration</div>
+          <div class="subtitle">Safe, message‑ID only, status‑aware labeling</div>
+        </div>
+      </div>
+      <div id="statusChip" class="chip idle"><dot></dot><span id="statusText">Idle</span></div>
+    </nav>
+    <main class="container">
+      <div id="toasts" class="toasts"></div>
+      <div class="grid">
+        <section class="card">
+          <header class="card-header">
+            <div class="card-title">Secrets (first run)</div>
+            <small class="helper">Stored securely in your system keychain</small>
+          </header>
+          <div class="card-body">
+            <div class="stack">
+              <div class="field">
+                <label>Front API Token</label>
+                <input id="frontToken" class="input" type="password" placeholder="Front API Token" />
+              </div>
+              <div class="field">
+                <label>Google OAuth credentials.json (paste full JSON)</label>
+                <textarea id="googleCreds" class="textarea" placeholder='{"installed": { ... }}'></textarea>
+              </div>
+              <div class="row">
+                <button id="saveSecrets" class="btn btn-secondary">Save Secrets</button>
+                <span id="saveStatus" class="helper"></span>
+              </div>
+            </div>
+          </div>
+        </section>
+        <section class="card">
+          <header class="card-header">
+            <div class="card-title">Run</div>
+            <small class="helper">Dry run recommended first</small>
+          </header>
+          <div class="card-body">
+            <div class="stack">
+              <div class="row">
+                <button id="run" class="btn btn-primary">Run Migration</button>
+                <button id="cancel" class="btn btn-danger" disabled>Stop</button>
+                <label class="row" style="margin-left: 8px;">
+                  <input id="dryRun" type="checkbox" checked />
+                  <span class="helper">Dry Run</span>
+                </label>
+                <div class="row" style="margin-left: auto;">
+                  <label class="helper">Log Level</label>
+                  <select id="logLevel" class="select">
+                    <option value="error">error</option>
+                    <option value="warn">warn</option>
+                    <option value="info" selected>info</option>
+                    <option value="debug">debug</option>
+                  </select>
+                  <button id="clear" class="btn btn-secondary">Clear</button>
+                </div>
+              </div>
+              <pre id="output" class="log"></pre>
+            </div>
+          </div>
+        </section>
   <script>
     const runBtn = document.getElementById('run');
     const cancelBtn = document.getElementById('cancel');
@@ -47,16 +80,56 @@
     const output = document.getElementById('output');
     const frontTokenEl = document.getElementById('frontToken');
     const googleCredsEl = document.getElementById('googleCreds');
+    const statusChip = document.getElementById('statusChip');
+    const statusText = document.getElementById('statusText');
+    const clearBtn = document.getElementById('clear');
+    const setStatus = (state, text) => { statusChip.className = 'chip ' + state; statusText.textContent = text; };
+    clearBtn.addEventListener('click', () => { output.textContent = ''; });
+    const toasts = document.getElementById('toasts');
+    const showToast = (text, type = 'info', duration = 3200) => {
+      const el = document.createElement('div');
+      el.className = `toast ${type}`;
+      el.textContent = text;
+      toasts.appendChild(el);
+      const timer = setTimeout(() => {
+        el.style.transition = 'opacity 200ms ease';
+        el.style.opacity = '0';
+        setTimeout(() => el.remove(), 220);
+      }, duration);
+      return () => { clearTimeout(timer); el.remove(); };
+    };
+    // Verify toasts are visible
+    setTimeout(() => showToast('UI ready', 'info', 1500), 100);
 
     saveBtn.addEventListener('click', async () => {
       saveStatus.textContent = 'Saving...';
+      const front = (frontTokenEl.value || '').trim();
+      const credsStr = (googleCredsEl.value || '').trim();
+      // Pre-validate Google creds JSON if provided
+      if (credsStr) {
+        try {
+          const j = JSON.parse(credsStr);
+          if (!j?.installed?.client_id || !j?.installed?.client_secret || !j?.installed?.redirect_uris) {
+            throw new Error('Invalid Google credentials JSON shape');
+          }
+        } catch (err) {
+          saveStatus.textContent = 'Invalid Google credentials JSON';
+          showToast('Invalid Google credentials JSON', 'error');
+          return;
+        }
+      }
       try {
-        await window.electronAPI.saveSecrets(frontTokenEl.value, googleCredsEl.value);
+        if (!window.electronAPI?.saveSecrets) {
+          throw new Error('Bridge unavailable');
+        }
+        await window.electronAPI.saveSecrets(front, credsStr);
         saveStatus.textContent = 'Saved to keychain';
+        showToast('Secrets saved to keychain', 'success');
         frontTokenEl.value = '';
         googleCredsEl.value = '';
       } catch (e) {
         saveStatus.textContent = 'Save failed: ' + (e?.message || e);
+        showToast('Failed to save secrets', 'error');
       }
     });
 
@@ -67,14 +140,20 @@
 
     runBtn.addEventListener('click', async () => {
       output.textContent = '';
+      runBtn.blur();
       runBtn.disabled = true;
       cancelBtn.disabled = false;
+      setStatus('running','Running');
+      showToast('Migration started', 'info');
       try {
         window.electronAPI.onMigrationData(chunk => append(chunk));
         window.electronAPI.onMigrationEnd(({ code }) => {
           append('\n\n[Process exited with code ' + code + ']');
           runBtn.disabled = false;
           cancelBtn.disabled = true;
+          const ok = code === 0;
+          setStatus(ok ? 'success' : 'error', ok ? 'Completed' : 'Failed');
+          showToast(ok ? 'Migration completed' : 'Migration failed', ok ? 'success' : 'error');
         });
         window.electronAPI.onMigrationError(({ message }) => append('\n[Error] ' + message + '\n'));
         const opts = { dryRun: document.getElementById('dryRun').checked, logLevel: document.getElementById('logLevel').value, };
@@ -83,12 +162,15 @@
         append('\n[Failed] ' + (err?.message || err) + '\n');
         runBtn.disabled = false;
         cancelBtn.disabled = true;
+        showToast('Migration failed to start', 'error');
       }
     });
 
     cancelBtn.addEventListener('click', async () => {
       cancelBtn.disabled = true;
       try { await window.electronAPI.cancelMigration(); } catch {}
+      setStatus('idle','Cancelled');
+      showToast('Migration cancelled', 'info');
     });
   </script>
 </body>

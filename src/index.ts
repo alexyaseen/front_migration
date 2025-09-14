@@ -367,6 +367,11 @@ async function main() {
   console.log('=============================\n');
 
   try {
+    // Early mode logging based on env (dotenv loaded via config import)
+    const envDryRun = (process.env.DRY_RUN || '').toLowerCase() !== 'false';
+    const scopeMsg = envDryRun ? 'gmail.readonly' : 'gmail.modify, gmail.labels';
+    console.log(`Mode: ${envDryRun ? 'DRY RUN' : 'LIVE'} (Gmail scopes: ${scopeMsg})`);
+
     await ensureInteractiveSetup();
 
     // Load final config after setup
