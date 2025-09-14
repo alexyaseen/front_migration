@@ -49,6 +49,7 @@ class FrontToGmailMigrator {
     skipped: 0,
   };
   private report: ReportRow[] = [];
+  private labelMap: Map<string, string> = new Map();
 
   constructor(config: Config) {
     this.config = config;
@@ -102,8 +103,8 @@ class FrontToGmailMigrator {
           );
         } else {
           this.logger.info(`Creating/verifying ${uniqueLabels.size} labels in Gmail...`);
-          const labelMap = await this.gmailClient.ensureLabels(Array.from(uniqueLabels));
-          this.logger.info(`Labels ready: ${Array.from(labelMap.keys()).join(', ')}`);
+          this.labelMap = await this.gmailClient.ensureLabels(Array.from(uniqueLabels));
+          this.logger.info(`Labels ready: ${Array.from(this.labelMap.keys()).join(', ')}`);
         }
       }
 
@@ -234,14 +235,21 @@ class FrontToGmailMigrator {
 
       const addLabelIds: string[] = [];
       for (const labelName of [...item.labels, statusLabel]) {
-        const label = await this.gmailClient.createLabel(labelName);
-        addLabelIds.push(label.id);
+        const id = this.labelMap.get(labelName);
+        if (id) {
+          addLabelIds.push(id);
+        } else {
+          this.logger.warn(`Label ID not found for ${labelName}`);
+        }
       }
 
       const removeLabelIds: string[] = [];
-      // Ensure the opposite status label exists to remove if present
-      const oppositeLabel = await this.gmailClient.createLabel(oppositeStatusLabel);
-      removeLabelIds.push(oppositeLabel.id);
+      const oppositeLabelId = this.labelMap.get(oppositeStatusLabel);
+      if (oppositeLabelId) {
+        removeLabelIds.push(oppositeLabelId);
+      } else {
+        this.logger.warn(`Label ID not found for ${oppositeStatusLabel}`);
+      }
 
       await this.gmailClient.modifyThread(
         gmailMessage.threadId,
