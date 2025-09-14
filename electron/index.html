@@ -98,8 +98,6 @@
       }, duration);
       return () => { clearTimeout(timer); el.remove(); };
     };
-    // Verify toasts are visible
-    setTimeout(() => showToast('UI ready', 'info', 1500), 100);
 
     saveBtn.addEventListener('click', async () => {
       saveStatus.textContent = 'Saving...';
