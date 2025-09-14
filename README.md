@@ -71,7 +71,7 @@ GOOGLE_TOKEN_PATH=./token.json
 
 # Migration Settings
 BATCH_SIZE=10              # Process 10 conversations at a time
-DRY_RUN=true               # Set to false to make changes
+DRY_RUN=true               # Set to false to make changes (omit to stay in dry run mode)
 LOG_LEVEL=info             # error, warn, info, debug
 SKIP_ARCHIVED=false        # true: skip archived Front conversations
 FRONT_INBOX_ID=            # Optional: migrate only a specific Front inbox
@@ -97,7 +97,7 @@ This will:
 
 ### Actual Migration
 
-When satisfied with the dry run:
+When satisfied with the dry run (the tool defaults to dry run mode if `DRY_RUN` is omitted):
 
 1. Set `DRY_RUN=false` in `.env`
 2. Run the migration:
