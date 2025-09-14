@@ -5,7 +5,6 @@ import { ConversationMapper, MigrationItem, STATUS_LABEL_ARCHIVED, STATUS_LABEL_
 import { Logger } from './utils/logger_ascii';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import * as readline from 'readline';
 import { SecureStore } from './utils/secureStore';
 
 interface MigrationStats {
@@ -396,65 +395,19 @@ if (require.main === module) {
 // --------------- Interactive Setup Helpers ---------------
 async function ensureInteractiveSetup() {
   const store = new SecureStore();
-  // 1) Front API token: try env, then keychain, else prompt
+  // 1) Front API token: try env, then keychain, else hard fail
   if (!process.env.FRONT_API_KEY) {
     const saved = await store.getFrontToken();
     if (saved) {
       process.env.FRONT_API_KEY = saved;
     } else {
-      const entered = await prompt(`Enter your Front API token (read-only): `);
-      if (!entered || !entered.trim()) {
-        throw new Error('Front API token is required to proceed.');
-      }
-      const token = entered.trim();
-      await store.setFrontToken(token);
-      process.env.FRONT_API_KEY = token;
-      console.log(`[INFO] Front token saved to system keychain`);
+      throw new Error('FRONT_API_KEY is not set and no token found in keychain. Use the Electron UI to save secrets or set FRONT_API_KEY in the environment.');
     }
   }
 
-  // 2) Google credentials: if missing in keychain, prompt to paste JSON and save
+  // 2) Google credentials: must exist in keychain
   const creds = await store.getGoogleCredentials();
   if (!creds) {
-    console.log('Google credentials not found in keychain.');
-    console.log('Paste your OAuth 2.0 credentials JSON (Desktop application) below, then press Enter:');
-    const json = await promptMultiline('JSON> ');
-    let parsed: any;
-    try {
-      parsed = JSON.parse(json);
-      if (!parsed?.installed?.client_id || !parsed?.installed?.client_secret || !parsed?.installed?.redirect_uris) {
-        throw new Error('Invalid credentials: expected installed.client_id/client_secret/redirect_uris');
-      }
-    } catch (e) {
-      throw new Error(`Invalid JSON for Google credentials: ${(e as Error).message}`);
-    }
-    await store.setGoogleCredentials(parsed);
-    console.log(`[INFO] Google credentials saved to system keychain`);
+    throw new Error('Google OAuth credentials not found in keychain. Use the Electron UI to save credentials before running, or provide them via a setup step.');
   }
-}
-
-function prompt(question: string): Promise<string> {
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-  return new Promise(resolve => rl.question(question, answer => { rl.close(); resolve(answer); }));
-}
-
-function promptMultiline(promptText: string): Promise<string> {
-  // Simple one-line read that accepts full JSON on a single line; if users paste multi-line,
-  // many terminals will still deliver it; we capture until an empty line.
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-  const lines: string[] = [];
-  console.log('(Finish input with an empty line)');
-  rl.setPrompt(promptText);
-  rl.prompt();
-  return new Promise(resolve => {
-    rl.on('line', (line) => {
-      if (line.trim() === '') {
-        rl.close();
-      } else {
-        lines.push(line);
-        rl.prompt();
-      }
-    });
-    rl.on('close', () => resolve(lines.join('\n')));
-  });
 }
