@@ -48,7 +48,7 @@ npm install
    - Click "Create Credentials" > "OAuth client ID"
    - Choose "Desktop app"
    - Download the credentials JSON file
-5. Save the file as `credentials.json` in the project root
+5. Keep the file handy; you'll paste its contents when running the tool for the first time
 
 ### 4) Configure environment
 
@@ -64,10 +64,6 @@ cp .env.example .env
 # Front API Configuration
 FRONT_API_KEY=your_front_api_key_here
 FRONT_API_BASE_URL=https://api2.frontapp.com
-
-# Gmail API Configuration
-GOOGLE_CREDENTIALS_PATH=./credentials.json
-GOOGLE_TOKEN_PATH=./token.json
 
 # Migration Settings
 BATCH_SIZE=10              # Process 10 conversations at a time
@@ -88,7 +84,7 @@ npm run migrate
 ```
 
 This will:
-1. Authenticate with Gmail (first run creates `token.json`)
+1. Authenticate with Gmail (first run prompts for credentials and saves the token to your system keychain)
 2. Fetch conversations from Front
 3. Show what labels would be created (without creating them)
 4. Show what messages would be updated
@@ -156,7 +152,7 @@ You can filter this file to audit changes or spot-check ambiguous/skipped items.
 - Batch processing with short delays
 
 ### Authentication Issues
-1. Delete `token.json`
+1. Remove the stored Gmail token from your system keychain
 2. Run the tool again
 3. Follow the browser prompts to re-authenticate
 
