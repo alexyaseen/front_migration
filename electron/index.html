@@ -280,6 +280,8 @@
           const ok = code === 0;
           setStatus(ok ? 'success' : 'error', ok ? 'Completed' : 'Failed');
           showToast(ok ? 'Migration completed' : 'Migration failed', ok ? 'success' : 'error');
+          // Update token indicator in case OAuth occurred
+          refreshSecretsStatus();
         });
         window.electronAPI.onMigrationError(({ message }) => append('\n[Error] ' + message + '\n'));
         const opts = { dryRun: document.getElementById('dryRun').checked, logLevel: document.getElementById('logLevel').value, };
