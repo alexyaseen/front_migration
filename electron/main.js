@@ -64,6 +64,25 @@ ipcMain.handle('delete-google-creds', async () => {
   return { ok: true };
 });
 
+ipcMain.handle('get-google-token-info', async () => {
+  const store = require(path.join(__dirname, '..', 'dist', 'utils', 'secureStore.js'));
+  const secure = new store.SecureStore();
+  const token = await secure.getGoogleToken();
+  const exists = Boolean(token);
+  let scopes = [];
+  if (token && typeof token.scope === 'string') {
+    scopes = token.scope.split(/\s+/).filter(Boolean);
+  }
+  return { exists, scopes };
+});
+
+ipcMain.handle('delete-google-token', async () => {
+  const store = require(path.join(__dirname, '..', 'dist', 'utils', 'secureStore.js'));
+  const secure = new store.SecureStore();
+  await secure.deleteGoogleToken();
+  return { ok: true };
+});
+
 ipcMain.handle('run-migration', (_event, opts = {}) => {
   return new Promise((resolve, reject) => {
     const script = path.join(__dirname, '..', 'dist', 'index.js');

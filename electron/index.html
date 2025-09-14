@@ -35,10 +35,18 @@
                 </div>
                 <button id="btnFront" class="btn btn-secondary">Configure</button>
               </div>
-              <div class="row" style="justify-content: space-between;">
-                <div class="status-row">
-                  <strong>Google Credentials</strong>
-                  <span id="statusGoogle" class="status-badge warn">Not configured</span>
+              <div class="row" style="justify-content: space-between; align-items: flex-start;">
+                <div class="status-row" style="gap: 8px;">
+                  <div style="display:flex; flex-direction:column; gap:6px;">
+                    <div class="status-row">
+                      <strong>Google Credentials</strong>
+                      <span id="statusGoogle" class="status-badge warn">Not configured</span>
+                    </div>
+                    <div class="status-row">
+                      <span class="helper">OAuth Token</span>
+                      <span id="statusGoogleToken" class="status-badge warn">None</span>
+                    </div>
+                  </div>
                 </div>
                 <button id="btnGoogle" class="btn btn-secondary">Configure</button>
               </div>
@@ -111,7 +119,8 @@
       </div>
       <div class="modal-footer">
         <div style="margin-right:auto; display:flex; gap:8px;">
-          <button id="deleteGoogle" class="btn btn-danger">Delete</button>
+          <button id="deleteGoogle" class="btn btn-danger">Delete Credentials</button>
+          <button id="deleteGoogleToken" class="btn btn-danger">Delete OAuth Token</button>
         </div>
         <button id="cancelGoogle" class="btn btn-secondary">Cancel</button>
         <button id="saveGoogle" class="btn btn-primary">Save</button>
@@ -145,11 +154,31 @@
     // Secrets status
     const statusFront = document.getElementById('statusFront');
     const statusGoogle = document.getElementById('statusGoogle');
+    const statusGoogleToken = document.getElementById('statusGoogleToken');
     async function refreshSecretsStatus() {
       try {
         const s = await window.electronAPI.getSecretsStatus();
         if (s.front) { statusFront.className = 'status-badge ok'; statusFront.textContent = 'Configured'; } else { statusFront.className = 'status-badge warn'; statusFront.textContent = 'Not configured'; }
         if (s.google) { statusGoogle.className = 'status-badge ok'; statusGoogle.textContent = 'Configured'; } else { statusGoogle.className = 'status-badge warn'; statusGoogle.textContent = 'Not configured'; }
+        // Token info
+        try {
+          const info = await window.electronAPI.getGoogleTokenInfo();
+          if (info.exists) {
+            statusGoogleToken.className = 'status-badge ok';
+            const scopes = Array.isArray(info.scopes) ? info.scopes : [];
+            // Shorten well-known scopes for readability
+            const short = scopes.map(s => {
+              if (s.endsWith('/gmail.readonly')) return 'gmail.readonly';
+              if (s.endsWith('/gmail.modify')) return 'gmail.modify';
+              if (s.endsWith('/gmail.labels')) return 'gmail.labels';
+              return s.split('/').pop();
+            });
+            statusGoogleToken.textContent = short.length ? short.join(', ') : 'Present';
+          } else {
+            statusGoogleToken.className = 'status-badge warn';
+            statusGoogleToken.textContent = 'None';
+          }
+        } catch {}
       } catch {}
     }
     refreshSecretsStatus();
@@ -209,6 +238,13 @@
         closeModal(modalGoogle);
         refreshSecretsStatus();
       } catch (e) { showToast('Failed to save credentials', 'error'); }
+    });
+    document.getElementById('deleteGoogleToken').addEventListener('click', async () => {
+      try {
+        await window.electronAPI.deleteGoogleToken();
+        showToast('Google OAuth token deleted', 'success');
+        refreshSecretsStatus();
+      } catch (e) { showToast('Failed to delete token', 'error'); }
     });
     document.getElementById('deleteGoogle').addEventListener('click', async () => {
       try {
