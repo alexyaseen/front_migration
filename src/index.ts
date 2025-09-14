@@ -62,7 +62,8 @@ class FrontToGmailMigrator {
     this.logger.info('Initializing Gmail client...');
     this.gmailClient = await GmailClient.create(
       this.config.google.credentialsPath,
-      this.config.google.tokenPath
+      this.config.google.tokenPath,
+      this.config.migration.dryRun
     );
     this.logger.info('Gmail client initialized successfully');
   }
