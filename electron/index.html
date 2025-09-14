@@ -6,19 +6,76 @@
 </head>
 <body>
   <h1>Front to Gmail Migration</h1>
-  <button id="run">Run Migration</button>
-  <pre id="output"></pre>
+  <section>
+    <h3>Secrets (first run)</h3>
+    <label>
+      Front API Token:
+      <input id="frontToken" type="password" placeholder="Front API Token" style="width: 100%" />
+    </label>
+    <br />
+    <label>
+      Google OAuth credentials.json (paste full JSON):
+      <textarea id="googleCreds" rows="6" style="width: 100%" placeholder='{"installed": { ... }}'></textarea>
+    </label>
+    <br />
+    <button id="saveSecrets">Save Secrets</button>
+    <span id="saveStatus"></span>
+  </section>
+  <hr />
+  <section>
+    <button id="run">Run Migration</button>
+    <button id="cancel" disabled>Stop</button>
+  </section>
+  <pre id="output" style="white-space: pre-wrap; border: 1px solid #ccc; padding: 8px; height: 300px; overflow: auto;"></pre>
   <script>
-    const btn = document.getElementById('run');
+    const runBtn = document.getElementById('run');
+    const cancelBtn = document.getElementById('cancel');
+    const saveBtn = document.getElementById('saveSecrets');
+    const saveStatus = document.getElementById('saveStatus');
     const output = document.getElementById('output');
-    btn.addEventListener('click', async () => {
-      output.textContent = 'Running...';
+    const frontTokenEl = document.getElementById('frontToken');
+    const googleCredsEl = document.getElementById('googleCreds');
+
+    saveBtn.addEventListener('click', async () => {
+      saveStatus.textContent = 'Saving...';
       try {
-        const result = await window.electronAPI.runMigration();
-        output.textContent = result;
-      } catch (err) {
-        output.textContent = err;
+        await window.electronAPI.saveSecrets(frontTokenEl.value, googleCredsEl.value);
+        saveStatus.textContent = 'Saved to keychain';
+        frontTokenEl.value = '';
+        googleCredsEl.value = '';
+      } catch (e) {
+        saveStatus.textContent = 'Save failed: ' + (e?.message || e);
       }
+    });
+
+    const append = (txt) => {
+      output.textContent += txt;
+      output.scrollTop = output.scrollHeight;
+    };
+
+    runBtn.addEventListener('click', async () => {
+      output.textContent = '';
+      runBtn.disabled = true;
+      cancelBtn.disabled = false;
+      try {
+        window.electronAPI.onMigrationData(chunk => append(chunk));
+        window.electronAPI.onMigrationEnd(({ code }) => {
+          append('\n\n[Process exited with code ' + code + ']');
+          runBtn.disabled = false;
+          cancelBtn.disabled = true;
+        });
+        window.electronAPI.onMigrationError(({ message }) => append('\n[Error] ' + message + '\n'));
+        await window.electronAPI.runMigration();
+      } catch (err) {
+        append('\n[Failed] ' + (err?.message || err) + '\n');
+        runBtn.disabled = false;
+        cancelBtn.disabled = true;
+      }
+    });
+
+    cancelBtn.addEventListener('click', async () => {
+      cancelBtn.disabled = true;
+      try { await window.electronAPI.cancelMigration(); } catch {}
     });
   </script>
 </body>
