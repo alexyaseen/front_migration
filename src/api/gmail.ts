@@ -31,11 +31,13 @@ export class GmailClient {
   private auth: OAuth2Client;
   private limit: ReturnType<typeof pLimit>;
   private labelCache: Map<string, GmailLabel> = new Map();
+  private readOnly: boolean;
 
-  constructor(auth: OAuth2Client) {
+  constructor(auth: OAuth2Client, readOnly: boolean = false) {
     this.auth = auth;
     this.gmail = google.gmail({ version: 'v1', auth });
     this.limit = pLimit(5); // Gmail API rate limit friendly
+    this.readOnly = readOnly;
   }
 
   private async sleep(ms: number): Promise<void> {
@@ -107,7 +109,7 @@ export class GmailClient {
       console.log('Token saved to', tokenPath);
     }
 
-    return new GmailClient(auth);
+    return new GmailClient(auth, readonly);
   }
 
   async getLabels(): Promise<GmailLabel[]> {
@@ -130,7 +132,14 @@ export class GmailClient {
     return labels as GmailLabel[];
   }
 
+  private ensureWritable(operation: string) {
+    if (this.readOnly) {
+      throw new Error(`Blocked write: ${operation} while in read-only (dry run) mode`);
+    }
+  }
+
   async createLabel(name: string): Promise<GmailLabel> {
+    this.ensureWritable('labels.create');
     const existing = this.labelCache.get(name.toLowerCase());
     if (existing) {
       return existing;
@@ -169,6 +178,7 @@ export class GmailClient {
   }
 
   async ensureLabels(names: string[]): Promise<Map<string, string>> {
+    this.ensureWritable('labels.ensure');
     await this.getLabels();
     const labelMap = new Map<string, string>();
 
@@ -233,6 +243,7 @@ export class GmailClient {
     addLabelIds: string[],
     removeLabelIds: string[] = []
   ): Promise<void> {
+    this.ensureWritable('messages.modify');
     await this.withRetry(
       () => this.limit(() => this.gmail.users.messages.modify({
         userId: 'me',
@@ -251,6 +262,7 @@ export class GmailClient {
     addLabelIds: string[],
     removeLabelIds: string[] = []
   ): Promise<void> {
+    this.ensureWritable('threads.modify');
     await this.withRetry(
       () => this.limit(() => this.gmail.users.threads.modify({
         userId: 'me',
@@ -269,6 +281,7 @@ export class GmailClient {
     addLabelIds: string[],
     removeLabelIds: string[] = []
   ): Promise<void> {
+    this.ensureWritable('messages.batchModify');
     if (messageIds.length === 0) return;
 
     const chunks = [];
@@ -292,10 +305,12 @@ export class GmailClient {
   }
 
   async archiveMessage(messageId: string): Promise<void> {
+    this.ensureWritable('messages.archive');
     await this.modifyMessage(messageId, [], ['INBOX']);
   }
 
   async archiveMessages(messageIds: string[]): Promise<void> {
+    this.ensureWritable('messages.archiveMany');
     await this.batchModifyMessages(messageIds, [], ['INBOX']);
   }
 }
@@ -322,7 +337,7 @@ export async function createGmailClientWithKeychain(store: SecureStore, readonly
   const saved = await store.getGoogleToken();
   if (saved) {
     oAuth2Client.setCredentials(saved as any);
-    return new GmailClient(oAuth2Client);
+    return new GmailClient(oAuth2Client, readonly);
   }
 
   const scopes = readonly
@@ -336,7 +351,7 @@ export async function createGmailClientWithKeychain(store: SecureStore, readonly
   const { tokens } = await oAuth2Client.getToken(code);
   oAuth2Client.setCredentials(tokens);
   await store.setGoogleToken(tokens as GoogleToken);
-  return new GmailClient(oAuth2Client);
+  return new GmailClient(oAuth2Client, readonly);
 }
 
 async function getLoopbackRedirectUri(): Promise<string> {
