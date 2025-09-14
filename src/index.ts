@@ -1,6 +1,6 @@
 import { FrontClient } from './api/front';
 import { GmailClient } from './api/gmail';
-import { loadConfig } from './config';
+import { loadConfig, Config } from './config';
 import { ConversationMapper, MigrationItem, STATUS_LABEL_ARCHIVED, STATUS_LABEL_INBOX } from './utils/mapper';
 import { Logger } from './utils/logger_ascii';
 import * as fs from 'fs/promises';
@@ -36,7 +36,7 @@ interface ReportRow {
 class FrontToGmailMigrator {
   private frontClient: FrontClient;
   private gmailClient!: GmailClient;
-  private config = loadConfig();
+  private config: Config;
   private logger: Logger;
   private stats: MigrationStats = {
     total: 0,
@@ -50,7 +50,8 @@ class FrontToGmailMigrator {
   };
   private report: ReportRow[] = [];
 
-  constructor() {
+  constructor(config: Config) {
+    this.config = config;
     this.logger = new Logger('Migrator', this.config.migration.logLevel);
     this.frontClient = new FrontClient(
       this.config.front.apiKey,
@@ -364,7 +365,7 @@ async function main() {
     // Load final config after setup
     const config = loadConfig();
 
-    const migrator = new FrontToGmailMigrator();
+    const migrator = new FrontToGmailMigrator(config);
     await migrator.run();
 
     console.log('\nMigration completed successfully!');
