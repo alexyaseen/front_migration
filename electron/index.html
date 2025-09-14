@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Front to Gmail Migration</title>
+</head>
+<body>
+  <h1>Front to Gmail Migration</h1>
+  <button id="run">Run Migration</button>
+  <pre id="output"></pre>
+  <script>
+    const btn = document.getElementById('run');
+    const output = document.getElementById('output');
+    btn.addEventListener('click', async () => {
+      output.textContent = 'Running...';
+      try {
+        const result = await window.electronAPI.runMigration();
+        output.textContent = result;
+      } catch (err) {
+        output.textContent = err;
+      }
+    });
+  </script>
+</body>
+</html>
