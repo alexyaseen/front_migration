@@ -1,6 +1,6 @@
 import * as dotenv from 'dotenv';
 import * as path from 'path';
-import { LogLevel } from './utils/logger';
+import { LogLevel } from './utils/logger_ascii';
 
 dotenv.config();
 

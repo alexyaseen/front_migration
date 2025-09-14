@@ -55,8 +55,41 @@ export class FrontClient {
     this.limit = pLimit(2); // Front API rate limit friendly
   }
 
+  private async sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  private isRetriableError(error: any): boolean {
+    const status = error?.response?.status;
+    const code = error?.code;
+    if (status === 429) return true;
+    if (status && status >= 500) return true;
+    if (code && ['ECONNRESET', 'ETIMEDOUT', 'ENOTFOUND', 'EAI_AGAIN'].includes(code)) return true;
+    return false;
+  }
+
+  private async withRetry<T>(fn: () => Promise<T>, description: string, maxAttempts = 3, baseDelayMs = 500): Promise<T> {
+    let attempt = 0;
+    let lastError: any;
+    while (attempt < maxAttempts) {
+      try {
+        return await fn();
+      } catch (err: any) {
+        lastError = err;
+        attempt++;
+        if (attempt >= maxAttempts || !this.isRetriableError(err)) {
+          throw err;
+        }
+        const delay = baseDelayMs * Math.pow(2, attempt - 1) + Math.floor(Math.random() * 100);
+        // Simple jitter
+        await this.sleep(delay);
+      }
+    }
+    throw lastError;
+  }
+
   async getInboxes() {
-    const response = await this.client.get('/inboxes');
+    const response = await this.withRetry(() => this.client.get('/inboxes'), 'getInboxes');
     return response.data._results;
   }
 
@@ -77,8 +110,9 @@ export class FrontClient {
       params.page_token = page;
     }
 
-    const response = await this.limit(() => 
-      this.client.get(url, { params })
+    const response = await this.withRetry(
+      () => this.limit(() => this.client.get(url, { params })),
+      'getConversations'
     );
 
     return {
@@ -105,14 +139,15 @@ export class FrontClient {
   }
 
   async getConversationMessages(conversationId: string): Promise<FrontMessage[]> {
-    const response = await this.limit(() =>
-      this.client.get(`/conversations/${conversationId}/messages`)
+    const response = await this.withRetry(
+      () => this.limit(() => this.client.get(`/conversations/${conversationId}/messages`)),
+      'getConversationMessages'
     );
     return response.data._results;
   }
 
   async getTags(): Promise<FrontTag[]> {
-    const response = await this.client.get('/tags');
+    const response = await this.withRetry(() => this.client.get('/tags'), 'getTags');
     return response.data._results;
   }
 }

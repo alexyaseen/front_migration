@@ -2,7 +2,7 @@ import { google, gmail_v1 } from 'googleapis';
 import { OAuth2Client } from 'google-auth-library';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { authenticate } from '@google-auth-library/local-auth';
+import { authenticate } from '@google-cloud/local-auth';
 import pLimit from 'p-limit';
 
 export interface GmailLabel {
@@ -30,6 +30,38 @@ export class GmailClient {
     this.auth = auth;
     this.gmail = google.gmail({ version: 'v1', auth });
     this.limit = pLimit(5); // Gmail API rate limit friendly
+  }
+
+  private async sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  private isRetriableError(error: any): boolean {
+    const status = error?.code || error?.response?.status;
+    const errors = error?.errors || error?.response?.data?.error?.errors;
+    const reason = Array.isArray(errors) ? errors[0]?.reason : undefined;
+    if (status === 429 || reason === 'rateLimitExceeded' || reason === 'userRateLimitExceeded') return true;
+    if (status && status >= 500) return true;
+    return false;
+  }
+
+  private async withRetry<T>(fn: () => Promise<T>, description: string, maxAttempts = 3, baseDelayMs = 500): Promise<T> {
+    let attempt = 0;
+    let lastError: any;
+    while (attempt < maxAttempts) {
+      try {
+        return await fn();
+      } catch (err: any) {
+        lastError = err;
+        attempt++;
+        if (attempt >= maxAttempts || !this.isRetriableError(err)) {
+          throw err;
+        }
+        const delay = baseDelayMs * Math.pow(2, attempt - 1) + Math.floor(Math.random() * 100);
+        await this.sleep(delay);
+      }
+    }
+    throw lastError;
   }
 
   static async create(credentialsPath: string, tokenPath: string): Promise<GmailClient> {
@@ -66,7 +98,10 @@ export class GmailClient {
   }
 
   async getLabels(): Promise<GmailLabel[]> {
-    const response = await this.gmail.users.labels.list({ userId: 'me' });
+    const response = await this.withRetry(
+      () => this.gmail.users.labels.list({ userId: 'me' }),
+      'labels.list'
+    );
     const labels = response.data.labels || [];
     
     labels.forEach(label => {
@@ -89,14 +124,17 @@ export class GmailClient {
     }
 
     try {
-      const response = await this.gmail.users.labels.create({
-        userId: 'me',
-        requestBody: {
-          name,
-          labelListVisibility: 'labelShow',
-          messageListVisibility: 'show',
-        },
-      });
+      const response = await this.withRetry(
+        () => this.gmail.users.labels.create({
+          userId: 'me',
+          requestBody: {
+            name,
+            labelListVisibility: 'labelShow',
+            messageListVisibility: 'show',
+          },
+        }),
+        'labels.create'
+      );
 
       const label: GmailLabel = {
         id: response.data.id!,
@@ -134,13 +172,14 @@ export class GmailClient {
     let pageToken: string | undefined;
 
     do {
-      const response = await this.limit(() =>
-        this.gmail.users.messages.list({
+      const response = await this.withRetry(
+        () => this.limit(() => this.gmail.users.messages.list({
           userId: 'me',
           q: query,
           maxResults: Math.min(maxResults - messages.length, 100),
           pageToken,
-        })
+        })),
+        'messages.list'
       );
 
       if (response.data.messages) {
@@ -154,11 +193,12 @@ export class GmailClient {
   }
 
   async getMessage(messageId: string): Promise<GmailMessage> {
-    const response = await this.limit(() =>
-      this.gmail.users.messages.get({
+    const response = await this.withRetry(
+      () => this.limit(() => this.gmail.users.messages.get({
         userId: 'me',
         id: messageId,
-      })
+      })),
+      'messages.get'
     );
 
     return response.data as GmailMessage;
@@ -180,15 +220,34 @@ export class GmailClient {
     addLabelIds: string[],
     removeLabelIds: string[] = []
   ): Promise<void> {
-    await this.limit(() =>
-      this.gmail.users.messages.modify({
+    await this.withRetry(
+      () => this.limit(() => this.gmail.users.messages.modify({
         userId: 'me',
         id: messageId,
         requestBody: {
           addLabelIds,
           removeLabelIds,
         },
-      })
+      })),
+      'messages.modify'
+    );
+  }
+
+  async modifyThread(
+    threadId: string,
+    addLabelIds: string[],
+    removeLabelIds: string[] = []
+  ): Promise<void> {
+    await this.withRetry(
+      () => this.limit(() => this.gmail.users.threads.modify({
+        userId: 'me',
+        id: threadId,
+        requestBody: {
+          addLabelIds,
+          removeLabelIds,
+        },
+      })),
+      'threads.modify'
     );
   }
 
@@ -205,15 +264,16 @@ export class GmailClient {
     }
 
     for (const chunk of chunks) {
-      await this.limit(() =>
-        this.gmail.users.messages.batchModify({
+      await this.withRetry(
+        () => this.limit(() => this.gmail.users.messages.batchModify({
           userId: 'me',
           requestBody: {
             ids: chunk,
             addLabelIds,
             removeLabelIds,
           },
-        })
+        })),
+        'messages.batchModify'
       );
     }
   }

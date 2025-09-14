@@ -1,5 +1,8 @@
 import { FrontConversation, FrontMessage } from '../api/front';
 
+export const STATUS_LABEL_ARCHIVED = 'Front/Status/Archived';
+export const STATUS_LABEL_INBOX = 'Front/Status/Inbox';
+
 export interface MigrationItem {
   frontConversationId: string;
   subject: string;
@@ -64,49 +67,15 @@ export class ConversationMapper {
     
     // If it's a reserved label, prefix it
     if (reserved.includes(sanitized.toUpperCase())) {
-      sanitized = `Front-${sanitized}`;
+      // Reserved system labels get a hyphen prefix and no folder prefix
+      return `Front-${sanitized}`;
     }
-    
+
     // Add Front prefix to make it clear these came from Front
     if (!sanitized.startsWith('Front/')) {
       sanitized = `Front/${sanitized}`;
     }
     
     return sanitized;
-  }
-
-  static buildGmailSearchQuery(item: MigrationItem): string {
-    const queries: string[] = [];
-    
-    // Search by RFC message ID if available
-    if (item.gmailMessageId) {
-      return `rfc822msgid:${item.gmailMessageId}`;
-    }
-    
-    // Otherwise build a query based on other attributes
-    if (item.subject && item.subject !== '(no subject)') {
-      queries.push(`subject:"${item.subject}"`);
-    }
-    
-    // Search by participants
-    if (item.emailAddresses.length > 0) {
-      const participantQuery = item.emailAddresses
-        .slice(0, 3) // Limit to avoid query being too long
-        .map(email => `(from:${email} OR to:${email})`)
-        .join(' OR ');
-      queries.push(`(${participantQuery})`);
-    }
-    
-    // Add date range (within 1 day of Front conversation creation)
-    const startDate = new Date(item.createdAt);
-    startDate.setDate(startDate.getDate() - 1);
-    const endDate = new Date(item.createdAt);
-    endDate.setDate(endDate.getDate() + 1);
-    
-    const after = startDate.toISOString().split('T')[0];
-    const before = endDate.toISOString().split('T')[0];
-    queries.push(`after:${after} before:${before}`);
-    
-    return queries.join(' ');
   }
 }

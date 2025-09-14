@@ -1,18 +1,35 @@
 import { FrontClient } from './api/front';
 import { GmailClient } from './api/gmail';
 import { loadConfig } from './config';
-import { ConversationMapper, MigrationItem } from './utils/mapper';
-import { Logger } from './utils/logger';
+import { ConversationMapper, MigrationItem, STATUS_LABEL_ARCHIVED, STATUS_LABEL_INBOX } from './utils/mapper';
+import { Logger } from './utils/logger_ascii';
 import * as fs from 'fs/promises';
+import * as path from 'path';
 
 interface MigrationStats {
   total: number;
   processed: number;
   matched: number;
   labeled: number;
-  archived: number;
+  statusArchived: number;
+  statusInbox: number;
   failed: number;
   skipped: number;
+}
+
+interface ReportRow {
+  frontConversationId: string;
+  subject: string;
+  createdAt: string;
+  isArchived: boolean;
+  matchMethod: 'message-id' | 'none';
+  gmailResults: number;
+  gmailMessageId?: string;
+  threadId?: string;
+  labelsToAdd: string[];
+  labelsToRemove: string[];
+  action: 'applied' | 'dry_run' | 'skipped' | 'no_match' | 'failed';
+  reason?: string;
 }
 
 class FrontToGmailMigrator {
@@ -25,10 +42,12 @@ class FrontToGmailMigrator {
     processed: 0,
     matched: 0,
     labeled: 0,
-    archived: 0,
+    statusArchived: 0,
+    statusInbox: 0,
     failed: 0,
     skipped: 0,
   };
+  private report: ReportRow[] = [];
 
   constructor() {
     this.logger = new Logger('Migrator', this.config.migration.logLevel);
@@ -69,11 +88,20 @@ class FrontToGmailMigrator {
       migrationItems.forEach(item => {
         item.labels.forEach(label => uniqueLabels.add(label));
       });
+      // Always include status labels
+      uniqueLabels.add(STATUS_LABEL_ARCHIVED);
+      uniqueLabels.add(STATUS_LABEL_INBOX);
 
       if (uniqueLabels.size > 0) {
-        this.logger.info(`Creating/verifying ${uniqueLabels.size} labels in Gmail...`);
-        const labelMap = await this.gmailClient.ensureLabels(Array.from(uniqueLabels));
-        this.logger.info(`Labels ready: ${Array.from(labelMap.keys()).join(', ')}`);
+        if (this.config.migration.dryRun) {
+          this.logger.info(
+            `[DRY RUN] Would create/verify ${uniqueLabels.size} labels in Gmail: ${Array.from(uniqueLabels).join(', ')}`
+          );
+        } else {
+          this.logger.info(`Creating/verifying ${uniqueLabels.size} labels in Gmail...`);
+          const labelMap = await this.gmailClient.ensureLabels(Array.from(uniqueLabels));
+          this.logger.info(`Labels ready: ${Array.from(labelMap.keys()).join(', ')}`);
+        }
       }
 
       // Step 4: Process each conversation
@@ -94,7 +122,7 @@ class FrontToGmailMigrator {
           this.logger.progress(
             this.stats.processed,
             this.stats.total,
-            `Matched: ${this.stats.matched}, Labeled: ${this.stats.labeled}, Archived: ${this.stats.archived}`
+            `Matched: ${this.stats.matched}, Labeled: ${this.stats.labeled}, Status(Arch/In): ${this.stats.statusArchived}/${this.stats.statusInbox}`
           );
         }
 
@@ -106,6 +134,7 @@ class FrontToGmailMigrator {
 
       // Step 5: Report results
       this.printSummary();
+      await this.writeCsvReport();
 
     } catch (error) {
       this.logger.error('Migration failed:', error);
@@ -115,66 +144,139 @@ class FrontToGmailMigrator {
 
   private async processMigrationItem(item: MigrationItem) {
     try {
+      // Require strict Message-ID match only; skip if missing
+      if (!item.gmailMessageId) {
+        this.logger.debug(`Skipping (missing Message-ID): ${item.subject}`);
+        this.stats.skipped++;
+        this.report.push({
+          frontConversationId: item.frontConversationId,
+          subject: item.subject,
+          createdAt: item.createdAt.toISOString(),
+          isArchived: item.isArchived,
+          matchMethod: 'none',
+          gmailResults: 0,
+          labelsToAdd: [],
+          labelsToRemove: [],
+          action: 'skipped',
+          reason: 'missing_message_id'
+        });
+        return;
+      }
       // Skip archived conversations if configured
       if (this.config.migration.skipArchived && item.isArchived) {
         this.logger.debug(`Skipping archived conversation: ${item.subject}`);
         this.stats.skipped++;
+        this.report.push({
+          frontConversationId: item.frontConversationId,
+          subject: item.subject,
+          createdAt: item.createdAt.toISOString(),
+          isArchived: item.isArchived,
+          matchMethod: item.gmailMessageId ? 'message-id' : 'none',
+          gmailResults: 0,
+          labelsToAdd: [],
+          labelsToRemove: [],
+          action: 'skipped',
+          reason: 'skip_archived=true'
+        });
         return;
       }
 
-      // Find corresponding Gmail message
-      const query = ConversationMapper.buildGmailSearchQuery(item);
-      this.logger.debug(`Searching Gmail with query: ${query}`);
-      
-      const messages = await this.gmailClient.searchMessages(query, 10);
-      
-      if (messages.length === 0) {
+      // Find corresponding Gmail message by RFC Message-ID only
+      this.logger.debug(`Looking up Gmail by Message-ID: ${item.gmailMessageId}`);
+      const gmailMessage = await this.gmailClient.getMessageByMessageId(item.gmailMessageId);
+      if (!gmailMessage) {
         this.logger.debug(`No Gmail match found for: ${item.subject}`);
+        this.report.push({
+          frontConversationId: item.frontConversationId,
+          subject: item.subject,
+          createdAt: item.createdAt.toISOString(),
+          isArchived: item.isArchived,
+          matchMethod: 'message-id',
+          gmailResults: 0,
+          labelsToAdd: [],
+          labelsToRemove: [],
+          action: 'no_match'
+        });
         return;
       }
 
       this.stats.matched++;
-
-      // Get the first message (most likely match)
-      const gmailMessage = messages[0];
-      this.logger.debug(`Found Gmail message: ${gmailMessage.id} for Front conversation: ${item.subject}`);
+      this.logger.debug(`Found Gmail message: ${gmailMessage.id} (thread ${gmailMessage.threadId}) for Front conversation: ${item.subject}`);
 
       if (this.config.migration.dryRun) {
-        this.logger.info(`[DRY RUN] Would update message ${gmailMessage.id}:`);
-        this.logger.info(`  - Add labels: ${item.labels.join(', ')}`);
-        if (item.isArchived) {
-          this.logger.info(`  - Archive (remove from INBOX)`);
-        }
+        this.logger.info(`[DRY RUN] Would update thread ${gmailMessage.threadId}:`);
+        const statusLabel = item.isArchived ? STATUS_LABEL_ARCHIVED : STATUS_LABEL_INBOX;
+        this.logger.info(`  - Add labels: ${[...item.labels, statusLabel].join(', ')}`);
+        const opposite = item.isArchived ? STATUS_LABEL_INBOX : STATUS_LABEL_ARCHIVED;
+        this.logger.info(`  - Remove labels: ${opposite}`);
+        this.report.push({
+          frontConversationId: item.frontConversationId,
+          subject: item.subject,
+          createdAt: item.createdAt.toISOString(),
+          isArchived: item.isArchived,
+          matchMethod: 'message-id',
+          gmailResults: 1,
+          gmailMessageId: gmailMessage.id,
+          threadId: gmailMessage.threadId,
+          labelsToAdd: [...item.labels, statusLabel],
+          labelsToRemove: [opposite],
+          action: 'dry_run'
+        });
         return;
       }
 
-      // Apply labels
-      if (item.labels.length > 0) {
-        const labelIds: string[] = [];
-        for (const labelName of item.labels) {
-          const label = await this.gmailClient.createLabel(labelName);
-          labelIds.push(label.id);
-        }
-        
-        await this.gmailClient.modifyMessage(
-          gmailMessage.id,
-          labelIds,
-          []
-        );
-        this.stats.labeled++;
-        this.logger.debug(`Applied ${labelIds.length} labels to message ${gmailMessage.id}`);
+      // Apply labels: Front tag labels + status label. Remove opposite status label.
+      const statusLabel = item.isArchived ? STATUS_LABEL_ARCHIVED : STATUS_LABEL_INBOX;
+      const oppositeStatusLabel = item.isArchived ? STATUS_LABEL_INBOX : STATUS_LABEL_ARCHIVED;
+
+      const addLabelIds: string[] = [];
+      for (const labelName of [...item.labels, statusLabel]) {
+        const label = await this.gmailClient.createLabel(labelName);
+        addLabelIds.push(label.id);
       }
 
-      // Archive if needed
-      if (item.isArchived) {
-        await this.gmailClient.archiveMessage(gmailMessage.id);
-        this.stats.archived++;
-        this.logger.debug(`Archived message ${gmailMessage.id}`);
-      }
+      const removeLabelIds: string[] = [];
+      // Ensure the opposite status label exists to remove if present
+      const oppositeLabel = await this.gmailClient.createLabel(oppositeStatusLabel);
+      removeLabelIds.push(oppositeLabel.id);
+
+      await this.gmailClient.modifyThread(
+        gmailMessage.threadId,
+        addLabelIds,
+        removeLabelIds
+      );
+      this.stats.labeled += addLabelIds.length;
+      if (item.isArchived) this.stats.statusArchived++; else this.stats.statusInbox++;
+      this.logger.debug(`Applied ${addLabelIds.length} labels to thread ${gmailMessage.threadId} (removed opposite status label if present).`);
+      this.report.push({
+        frontConversationId: item.frontConversationId,
+        subject: item.subject,
+        createdAt: item.createdAt.toISOString(),
+        isArchived: item.isArchived,
+        matchMethod: 'message-id',
+        gmailResults: 1,
+        gmailMessageId: gmailMessage.id,
+        threadId: gmailMessage.threadId,
+        labelsToAdd: [...item.labels, statusLabel],
+        labelsToRemove: [oppositeStatusLabel],
+        action: 'applied'
+      });
 
     } catch (error) {
       this.logger.error(`Failed to process item: ${item.subject}`, error);
       this.stats.failed++;
+      this.report.push({
+        frontConversationId: item.frontConversationId,
+        subject: item.subject,
+        createdAt: item.createdAt.toISOString(),
+        isArchived: item.isArchived,
+        matchMethod: item.gmailMessageId ? 'message-id' : 'none',
+        gmailResults: 0,
+        labelsToAdd: [],
+        labelsToRemove: [],
+        action: 'failed',
+        reason: (error as Error)?.message || 'unknown'
+      });
     }
   }
 
@@ -198,7 +300,7 @@ class FrontToGmailMigrator {
     console.log(`Processed:              ${this.stats.processed}`);
     console.log(`Matched in Gmail:       ${this.stats.matched}`);
     console.log(`Labels applied:         ${this.stats.labeled}`);
-    console.log(`Messages archived:      ${this.stats.archived}`);
+    console.log(`Status labeled (Arch/In): ${this.stats.statusArchived}/${this.stats.statusInbox}`);
     console.log(`Skipped:               ${this.stats.skipped}`);
     console.log(`Failed:                ${this.stats.failed}`);
     console.log('='.repeat(60));
@@ -206,6 +308,46 @@ class FrontToGmailMigrator {
     if (this.config.migration.dryRun) {
       console.log('\nThis was a DRY RUN - no changes were made to Gmail.');
       console.log('Set DRY_RUN=false in your .env file to perform the actual migration.');
+    }
+  }
+
+  private async writeCsvReport() {
+    try {
+      const dir = path.resolve(process.cwd(), 'reports');
+      await fs.mkdir(dir, { recursive: true });
+      const filename = `migration-report-${new Date().toISOString().replace(/[:.]/g, '-')}.csv`;
+      const filePath = path.join(dir, filename);
+
+      const headers = [
+        'frontConversationId', 'subject', 'createdAt', 'isArchived', 'matchMethod', 'gmailResults', 'gmailMessageId', 'threadId', 'labelsToAdd', 'labelsToRemove', 'action', 'reason'
+      ];
+
+      const escape = (val: any): string => {
+        if (val === undefined || val === null) return '';
+        const str = String(val).replace(/"/g, '""');
+        return `"${str}"`;
+      };
+
+      const rows = this.report.map(r => [
+        r.frontConversationId,
+        r.subject,
+        r.createdAt,
+        r.isArchived,
+        r.matchMethod,
+        r.gmailResults,
+        r.gmailMessageId || '',
+        r.threadId || '',
+        (r.labelsToAdd || []).join(';'),
+        (r.labelsToRemove || []).join(';'),
+        r.action,
+        r.reason || ''
+      ]);
+
+      const csv = [headers.map(escape).join(','), ...rows.map(row => row.map(escape).join(','))].join('\n');
+      await fs.writeFile(filePath, csv, 'utf8');
+      this.logger.info(`CSV report written to ${filePath}`);
+    } catch (err) {
+      this.logger.error('Failed to write CSV report', err as any);
     }
   }
 }
