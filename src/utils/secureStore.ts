@@ -1,3 +1,6 @@
+// TODO: Consider evaluating a more actively maintained alternative to `keytar`
+// for secret storage, while retaining OS keychain integration and compatibility
+// with both Electron and CLI contexts.
 import keytar from 'keytar';
 
 const SERVICE = 'front-to-gmail-migration';

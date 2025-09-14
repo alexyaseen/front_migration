@@ -79,6 +79,25 @@ ipcMain.handle('get-secrets-status', async () => {
   return { front: Boolean(front), google: Boolean(google) };
 });
 
+ipcMain.handle('list-front-inboxes', async () => {
+  try {
+    const store = require(path.join(__dirname, '..', 'dist', 'utils', 'secureStore.js'));
+    const secure = new store.SecureStore();
+    const token = await secure.getFrontToken();
+    if (!token) throw new Error('Front API token not configured');
+    const frontMod = require(path.join(__dirname, '..', 'dist', 'api', 'front.js'));
+    const baseUrl = process.env.FRONT_API_BASE_URL || 'https://api2.frontapp.com';
+    const client = new frontMod.FrontClient(token, baseUrl);
+    const inboxes = await client.getInboxes();
+    // Return minimal fields and sort by name
+    const items = (Array.isArray(inboxes) ? inboxes : []).map(x => ({ id: x.id, name: x.name })).filter(x => x.id && x.name);
+    items.sort((a, b) => a.name.localeCompare(b.name));
+    return { ok: true, inboxes: items };
+  } catch (e) {
+    return { ok: false, error: e?.message || String(e) };
+  }
+});
+
 ipcMain.handle('delete-front-token', async () => {
   const store = require(path.join(__dirname, '..', 'dist', 'utils', 'secureStore.js'));
   const secure = new store.SecureStore();
@@ -126,6 +145,9 @@ ipcMain.handle('run-migration', (_event, opts = {}) => {
     }
     if (typeof opts.logLevel === 'string' && opts.logLevel) {
       env.LOG_LEVEL = opts.logLevel;
+    }
+    if (typeof opts.frontInboxId === 'string') {
+      if (opts.frontInboxId) env.FRONT_INBOX_ID = opts.frontInboxId; else delete env.FRONT_INBOX_ID;
     }
     const child = spawn(process.execPath, [script], {
       cwd: path.join(__dirname, '..'),

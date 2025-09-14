@@ -85,6 +85,17 @@
                   <option value="debug">Detailed</option>
                 </select>
               </div>
+              <div class="row" style="gap:8px; align-items:center; justify-content: space-between; width: 100%;">
+                <div class="row" style="gap:6px; align-items:center;">
+                  <label class="helper" for="frontInbox">Front Inbox</label>
+                  <span class="info-icon" data-tip="Limit the migration to a single Front inbox. Leave as All Inboxes to migrate across all inboxes your token can access.">i</span>
+                </div>
+                <div id="frontInboxControl" class="row" style="gap:8px; align-items:center; min-height: 40px;">
+                  <select id="frontInbox" class="select" style="width: 240px; display: none;"></select>
+                  <span id="frontInboxLoading" class="helper" style="display:none;"><span class="spinner" aria-hidden="true"></span>Loading…</span>
+                  <span id="frontInboxNeedAuth" class="helper">Authenticate Front first</span>
+                </div>
+              </div>
             </div>
           </div>
         </section>
@@ -198,6 +209,9 @@
     const statusText = document.getElementById('statusText');
     const clearBtn = document.getElementById('clear');
     const openReportsBtn = document.getElementById('openReports');
+    const frontInboxEl = document.getElementById('frontInbox');
+    const frontInboxNeedAuth = document.getElementById('frontInboxNeedAuth');
+    const frontInboxLoading = document.getElementById('frontInboxLoading');
     const dryRunEl = document.getElementById('dryRun');
     const dryRunToggle = document.getElementById('dryRunToggle');
     const logLevelEl = document.getElementById('logLevel');
@@ -269,8 +283,56 @@
         btnGoogle.textContent = 'Configure';
         btnGoogleToken.textContent = 'Configure';
       } catch {}
+      // Refresh inbox list if Front is configured
+      try {
+        if (secrets.front) { await loadFrontInboxes(); } else { resetFrontInboxSelect(); }
+      } catch {}
     }
     refreshSecretsStatus();
+
+    function resetFrontInboxSelect() {
+      if (!frontInboxEl) return;
+      // Hide the dropdown when Front isn't authed and show helper text
+      frontInboxEl.style.display = 'none';
+      if (frontInboxNeedAuth) frontInboxNeedAuth.style.display = '';
+      if (frontInboxLoading) frontInboxLoading.style.display = 'none';
+    }
+
+    async function loadFrontInboxes() {
+      if (!frontInboxEl) return;
+      // Show the dropdown and hide the helper once we can load
+      if (frontInboxNeedAuth) frontInboxNeedAuth.style.display = 'none';
+      if (frontInboxLoading) frontInboxLoading.style.display = '';
+      frontInboxEl.style.display = 'none';
+      frontInboxEl.disabled = true;
+      frontInboxEl.innerHTML = '';
+      const baseOpt = document.createElement('option');
+      baseOpt.value = '';
+      baseOpt.textContent = 'All Inboxes';
+      frontInboxEl.appendChild(baseOpt);
+      try {
+        const res = await window.electronAPI.listFrontInboxes();
+        if (!res?.ok) throw new Error(res?.error || 'Failed to fetch inboxes');
+        const list = Array.isArray(res.inboxes) ? res.inboxes : [];
+        list.forEach(({ id, name }) => {
+          const o = document.createElement('option');
+          o.value = id;
+          o.textContent = name;
+          frontInboxEl.appendChild(o);
+        });
+        frontInboxEl.disabled = false;
+        if (frontInboxLoading) frontInboxLoading.style.display = 'none';
+        frontInboxEl.style.display = '';
+      } catch (e) {
+        // keep default and disabled, and toast error
+        showToast('Could not load Front inboxes', 'error');
+        if (frontInboxLoading) frontInboxLoading.style.display = 'none';
+        if (frontInboxNeedAuth) {
+          frontInboxNeedAuth.textContent = 'Failed to load inboxes';
+          frontInboxNeedAuth.style.display = '';
+        }
+      }
+    }
 
     // Modal helpers
     const modalFront = document.getElementById('modalFront');
@@ -531,7 +593,11 @@
           setRunning(false);
         });
         window.electronAPI.onMigrationError(({ message }) => append('\n[Error] ' + message + '\n'));
-        const opts = { dryRun: document.getElementById('dryRun').checked, logLevel: document.getElementById('logLevel').value, };
+        const opts = {
+          dryRun: document.getElementById('dryRun').checked,
+          logLevel: document.getElementById('logLevel').value,
+          frontInboxId: (frontInboxEl && !frontInboxEl.disabled) ? frontInboxEl.value : ''
+        };
         await window.electronAPI.runMigration(opts);
       } catch (err) {
         append('\n[Failed] ' + (err?.message || err) + '\n');
