@@ -30,6 +30,9 @@ export class SecureStore {
   async setFrontToken(token: string): Promise<void> {
     await keytar.setPassword(SERVICE, FRONT_TOKEN_ACCOUNT, token);
   }
+  async deleteFrontToken(): Promise<void> {
+    await keytar.deletePassword(SERVICE, FRONT_TOKEN_ACCOUNT);
+  }
 
   async getGoogleCredentials(): Promise<GoogleInstalledCredentials | null> {
     const raw = await keytar.getPassword(SERVICE, GOOGLE_CREDS_ACCOUNT);
@@ -48,6 +51,9 @@ export class SecureStore {
   async setGoogleCredentials(creds: GoogleInstalledCredentials): Promise<void> {
     await keytar.setPassword(SERVICE, GOOGLE_CREDS_ACCOUNT, JSON.stringify(creds));
   }
+  async deleteGoogleCredentials(): Promise<void> {
+    await keytar.deletePassword(SERVICE, GOOGLE_CREDS_ACCOUNT);
+  }
 
   async getGoogleToken(): Promise<GoogleToken | null> {
     const raw = await keytar.getPassword(SERVICE, GOOGLE_TOKEN_ACCOUNT);
@@ -62,5 +68,7 @@ export class SecureStore {
   async setGoogleToken(token: GoogleToken): Promise<void> {
     await keytar.setPassword(SERVICE, GOOGLE_TOKEN_ACCOUNT, JSON.stringify(token));
   }
+  async deleteGoogleToken(): Promise<void> {
+    await keytar.deletePassword(SERVICE, GOOGLE_TOKEN_ACCOUNT);
+  }
 }
-

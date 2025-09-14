@@ -2,6 +2,9 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
   saveSecrets: (frontToken, googleCredentialsJson) => ipcRenderer.invoke('save-secrets', { frontToken, googleCredentialsJson }),
+  getSecretsStatus: () => ipcRenderer.invoke('get-secrets-status'),
+  deleteFrontToken: () => ipcRenderer.invoke('delete-front-token'),
+  deleteGoogleCreds: () => ipcRenderer.invoke('delete-google-creds'),
   runMigration: (opts) => ipcRenderer.invoke('run-migration', opts),
   cancelMigration: () => ipcRenderer.invoke('cancel-migration'),
   clearMigrationListeners: () => {

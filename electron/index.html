@@ -23,22 +23,24 @@
       <div class="grid">
         <section class="card">
           <header class="card-header">
-            <div class="card-title">Secrets (first run)</div>
+            <div class="card-title">Secrets</div>
             <small class="helper">Stored securely in your system keychain</small>
           </header>
           <div class="card-body">
             <div class="stack">
-              <div class="field">
-                <label>Front API Token</label>
-                <input id="frontToken" class="input" type="password" placeholder="Front API Token" />
+              <div class="row" style="justify-content: space-between;">
+                <div class="status-row">
+                  <strong>Front API Token</strong>
+                  <span id="statusFront" class="status-badge warn">Not configured</span>
+                </div>
+                <button id="btnFront" class="btn btn-secondary">Configure</button>
               </div>
-              <div class="field">
-                <label>Google OAuth credentials.json (paste full JSON)</label>
-                <textarea id="googleCreds" class="textarea" placeholder='{"installed": { ... }}'></textarea>
-              </div>
-              <div class="row">
-                <button id="saveSecrets" class="btn btn-secondary">Save Secrets</button>
-                <span id="saveStatus" class="helper"></span>
+              <div class="row" style="justify-content: space-between;">
+                <div class="status-row">
+                  <strong>Google Credentials</strong>
+                  <span id="statusGoogle" class="status-badge warn">Not configured</span>
+                </div>
+                <button id="btnGoogle" class="btn btn-secondary">Configure</button>
               </div>
             </div>
           </div>
@@ -72,14 +74,55 @@
             </div>
           </div>
         </section>
+  <!-- Modals -->
+  <div id="modalFront" class="modal" role="dialog" aria-modal="true" aria-labelledby="modalFrontTitle">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <div id="modalFrontTitle" class="modal-title">Set Front API Token</div>
+        <button id="closeFront" class="btn btn-secondary">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="field">
+          <label>Front API Token</label>
+          <input id="frontInput" class="input" type="password" placeholder="Front API Token" />
+        </div>
+      </div>
+      <div class="modal-footer">
+        <div style="margin-right:auto; display:flex; gap:8px;">
+          <button id="deleteFront" class="btn btn-danger">Delete</button>
+        </div>
+        <button id="cancelFront" class="btn btn-secondary">Cancel</button>
+        <button id="saveFront" class="btn btn-primary">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="modalGoogle" class="modal" role="dialog" aria-modal="true" aria-labelledby="modalGoogleTitle">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <div id="modalGoogleTitle" class="modal-title">Set Google OAuth credentials.json</div>
+        <button id="closeGoogle" class="btn btn-secondary">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="field">
+          <label>Paste full JSON</label>
+          <textarea id="googleInput" class="textarea" rows="8" placeholder='{"installed": { ... }}'></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <div style="margin-right:auto; display:flex; gap:8px;">
+          <button id="deleteGoogle" class="btn btn-danger">Delete</button>
+        </div>
+        <button id="cancelGoogle" class="btn btn-secondary">Cancel</button>
+        <button id="saveGoogle" class="btn btn-primary">Save</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     const runBtn = document.getElementById('run');
     const cancelBtn = document.getElementById('cancel');
-    const saveBtn = document.getElementById('saveSecrets');
-    const saveStatus = document.getElementById('saveStatus');
     const output = document.getElementById('output');
-    const frontTokenEl = document.getElementById('frontToken');
-    const googleCredsEl = document.getElementById('googleCreds');
     const statusChip = document.getElementById('statusChip');
     const statusText = document.getElementById('statusText');
     const clearBtn = document.getElementById('clear');
@@ -99,36 +142,81 @@
       return () => { clearTimeout(timer); el.remove(); };
     };
 
-    saveBtn.addEventListener('click', async () => {
-      saveStatus.textContent = 'Saving...';
-      const front = (frontTokenEl.value || '').trim();
-      const credsStr = (googleCredsEl.value || '').trim();
-      // Pre-validate Google creds JSON if provided
-      if (credsStr) {
-        try {
-          const j = JSON.parse(credsStr);
-          if (!j?.installed?.client_id || !j?.installed?.client_secret || !j?.installed?.redirect_uris) {
-            throw new Error('Invalid Google credentials JSON shape');
-          }
-        } catch (err) {
-          saveStatus.textContent = 'Invalid Google credentials JSON';
-          showToast('Invalid Google credentials JSON', 'error');
-          return;
+    // Secrets status
+    const statusFront = document.getElementById('statusFront');
+    const statusGoogle = document.getElementById('statusGoogle');
+    async function refreshSecretsStatus() {
+      try {
+        const s = await window.electronAPI.getSecretsStatus();
+        if (s.front) { statusFront.className = 'status-badge ok'; statusFront.textContent = 'Configured'; } else { statusFront.className = 'status-badge warn'; statusFront.textContent = 'Not configured'; }
+        if (s.google) { statusGoogle.className = 'status-badge ok'; statusGoogle.textContent = 'Configured'; } else { statusGoogle.className = 'status-badge warn'; statusGoogle.textContent = 'Not configured'; }
+      } catch {}
+    }
+    refreshSecretsStatus();
+
+    // Modal helpers
+    const modalFront = document.getElementById('modalFront');
+    const modalGoogle = document.getElementById('modalGoogle');
+    const frontInput = document.getElementById('frontInput');
+    const googleInput = document.getElementById('googleInput');
+    const openModal = (el) => { el.classList.add('show'); };
+    const closeModal = (el) => { el.classList.remove('show'); };
+
+    // Open modals
+    document.getElementById('btnFront').addEventListener('click', () => { frontInput.value = ''; openModal(modalFront); });
+    document.getElementById('btnGoogle').addEventListener('click', () => { googleInput.value = ''; openModal(modalGoogle); });
+
+    // Close buttons
+    document.getElementById('closeFront').addEventListener('click', () => closeModal(modalFront));
+    document.getElementById('cancelFront').addEventListener('click', () => closeModal(modalFront));
+    document.getElementById('closeGoogle').addEventListener('click', () => closeModal(modalGoogle));
+    document.getElementById('cancelGoogle').addEventListener('click', () => closeModal(modalGoogle));
+
+    // Save actions
+    document.getElementById('saveFront').addEventListener('click', async () => {
+      const token = (frontInput.value || '').trim();
+      if (!token) { showToast('Token cannot be empty', 'error'); return; }
+      try {
+        await window.electronAPI.saveSecrets(token, '');
+        showToast('Front token saved', 'success');
+        closeModal(modalFront);
+        refreshSecretsStatus();
+      } catch (e) { showToast('Failed to save token', 'error'); }
+    });
+    document.getElementById('deleteFront').addEventListener('click', async () => {
+      try {
+        await window.electronAPI.deleteFrontToken();
+        showToast('Front token deleted', 'success');
+        closeModal(modalFront);
+        refreshSecretsStatus();
+      } catch (e) { showToast('Failed to delete token', 'error'); }
+    });
+    document.getElementById('saveGoogle').addEventListener('click', async () => {
+      const text = (googleInput.value || '').trim();
+      if (!text) { showToast('Credentials JSON cannot be empty', 'error'); return; }
+      try {
+        const j = JSON.parse(text);
+        if (!j?.installed?.client_id || !j?.installed?.client_secret || !j?.installed?.redirect_uris) {
+          throw new Error('Invalid shape');
         }
+      } catch {
+        showToast('Invalid Google credentials JSON', 'error');
+        return;
       }
       try {
-        if (!window.electronAPI?.saveSecrets) {
-          throw new Error('Bridge unavailable');
-        }
-        await window.electronAPI.saveSecrets(front, credsStr);
-        saveStatus.textContent = 'Saved to keychain';
-        showToast('Secrets saved to keychain', 'success');
-        frontTokenEl.value = '';
-        googleCredsEl.value = '';
-      } catch (e) {
-        saveStatus.textContent = 'Save failed: ' + (e?.message || e);
-        showToast('Failed to save secrets', 'error');
-      }
+        await window.electronAPI.saveSecrets('', text);
+        showToast('Google credentials saved', 'success');
+        closeModal(modalGoogle);
+        refreshSecretsStatus();
+      } catch (e) { showToast('Failed to save credentials', 'error'); }
+    });
+    document.getElementById('deleteGoogle').addEventListener('click', async () => {
+      try {
+        await window.electronAPI.deleteGoogleCreds();
+        showToast('Google credentials deleted', 'success');
+        closeModal(modalGoogle);
+        refreshSecretsStatus();
+      } catch (e) { showToast('Failed to delete credentials', 'error'); }
     });
 
     const append = (txt) => {

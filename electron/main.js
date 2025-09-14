@@ -42,6 +42,28 @@ ipcMain.handle('save-secrets', async (event, { frontToken, googleCredentialsJson
   return { ok: true };
 });
 
+ipcMain.handle('get-secrets-status', async () => {
+  const store = require(path.join(__dirname, '..', 'dist', 'utils', 'secureStore.js'));
+  const secure = new store.SecureStore();
+  const front = await secure.getFrontToken();
+  const google = await secure.getGoogleCredentials();
+  return { front: Boolean(front), google: Boolean(google) };
+});
+
+ipcMain.handle('delete-front-token', async () => {
+  const store = require(path.join(__dirname, '..', 'dist', 'utils', 'secureStore.js'));
+  const secure = new store.SecureStore();
+  await secure.deleteFrontToken();
+  return { ok: true };
+});
+
+ipcMain.handle('delete-google-creds', async () => {
+  const store = require(path.join(__dirname, '..', 'dist', 'utils', 'secureStore.js'));
+  const secure = new store.SecureStore();
+  await secure.deleteGoogleCredentials();
+  return { ok: true };
+});
+
 ipcMain.handle('run-migration', (_event, opts = {}) => {
   return new Promise((resolve, reject) => {
     const script = path.join(__dirname, '..', 'dist', 'index.js');
