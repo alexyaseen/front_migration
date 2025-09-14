@@ -10,75 +10,95 @@
   <div class="app">
     <nav class="nav">
       <div class="brand">
-        <div class="logo"></div>
+        <img class="logo" src="./logo.png" alt="App Logo" />
         <div>
           <div class="title">Front → Gmail Migration</div>
           <div class="subtitle">Safe, message‑ID only, status‑aware labeling</div>
         </div>
       </div>
-      <div id="statusChip" class="chip idle"><dot></dot><span id="statusText">Idle</span></div>
+      <div class="row" style="gap: 10px; align-items: center;">
+        <div id="statusChip" class="chip idle"><dot></dot><span id="statusText">Idle</span></div>
+        <button id="runStop" class="btn btn-primary run-btn">Run Migration</button>
+      </div>
     </nav>
     <main class="container">
       <div id="toasts" class="toasts"></div>
       <div class="grid">
         <section class="card">
           <header class="card-header">
-            <div class="card-title">Secrets</div>
-            <small class="helper">Stored securely in your system keychain</small>
+            <div class="card-title">Authentication</div>
+            <small class="helper">
+              Stored securely in your system keychain
+              <span class="info-icon" data-tip="Auth data (Front token, Google credentials, Gmail OAuth token) is stored encrypted by your OS keychain and never leaves your computer. The app does not save email content; only a CSV report is written to ./reports.">i</span>
+            </small>
           </header>
           <div class="card-body">
             <div class="stack">
               <div class="row" style="justify-content: space-between;">
                 <div class="status-row">
-                  <strong>Front API Token</strong>
+                  <span class="helper">Front API Token</span>
                   <span id="statusFront" class="status-badge warn">Not configured</span>
                 </div>
                 <button id="btnFront" class="btn btn-secondary">Configure</button>
               </div>
-              <div class="row" style="justify-content: space-between; align-items: flex-start;">
-                <div class="status-row" style="gap: 8px;">
-                  <div style="display:flex; flex-direction:column; gap:6px;">
-                    <div class="status-row">
-                      <strong>Google Credentials</strong>
-                      <span id="statusGoogle" class="status-badge warn">Not configured</span>
-                    </div>
-                    <div class="status-row">
-                      <span class="helper">OAuth Token</span>
-                      <span id="statusGoogleToken" class="status-badge warn">None</span>
-                    </div>
-                  </div>
+              <div class="row" style="justify-content: space-between;">
+                <div class="status-row">
+                  <span class="helper">Google Credentials</span>
+                  <span id="statusGoogle" class="status-badge warn">Not configured</span>
                 </div>
                 <button id="btnGoogle" class="btn btn-secondary">Configure</button>
+              </div>
+              <div class="row" style="justify-content: space-between;">
+                <div class="status-row">
+                  <span class="helper">Gmail OAuth Token</span>
+                  <span id="statusGoogleToken" class="status-badge warn">None</span>
+                </div>
+                <button id="btnGoogleToken" class="btn btn-secondary">Configure</button>
               </div>
             </div>
           </div>
         </section>
         <section class="card">
           <header class="card-header">
-            <div class="card-title">Run</div>
-            <small class="helper">Dry run recommended first</small>
+            <div class="card-title">Run Settings</div>
+            <small class="helper">Options apply to the next run</small>
           </header>
           <div class="card-body">
             <div class="stack">
-              <div class="row">
-                <button id="run" class="btn btn-primary">Run Migration</button>
-                <button id="cancel" class="btn btn-danger" disabled>Stop</button>
-                <label class="row" style="margin-left: 8px;">
-                  <input id="dryRun" type="checkbox" checked />
+              <div class="row" style="gap:8px; align-items:center; justify-content: space-between; width: 100%;">
+                <div class="row" style="gap:6px; align-items:center;">
                   <span class="helper">Dry Run</span>
-                </label>
-                <div class="row" style="margin-left: auto;">
-                  <label class="helper">Log Level</label>
-                  <select id="logLevel" class="select">
-                    <option value="error">error</option>
-                    <option value="warn">warn</option>
-                    <option value="info" selected>info</option>
-                    <option value="debug">debug</option>
-                  </select>
-                  <button id="clear" class="btn btn-secondary">Clear</button>
+                  <span class="info-icon" data-tip="Simulate the migration without making changes to Gmail. Authenticates, fetches data, logs planned label changes, and writes a CSV report. Disable to perform the actual migration.">i</span>
                 </div>
+                <label id="dryRunToggle" class="toggle">
+                  <input id="dryRun" type="checkbox" checked />
+                  <span class="slider"></span>
+                </label>
               </div>
+              <div class="row" style="gap:8px; align-items:center; justify-content: space-between; width: 100%;">
+                <div class="row" style="gap:6px; align-items:center;">
+                  <label class="helper" for="logLevel">Log Detail</label>
+                  <span class="info-icon" data-tip="Controls log verbosity. Default shows key steps and results; Detailed adds per-item lookups and diagnostics. Does not affect behavior.">i</span>
+                </div>
+                <select id="logLevel" class="select" style="width: 140px;">
+                  <option value="info" selected>Default</option>
+                  <option value="debug">Detailed</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="card span-2">
+          <header class="card-header">
+            <div class="card-title">Logs</div>
+          </header>
+          <div class="card-body">
+            <div class="log-panel">
               <pre id="output" class="log"></pre>
+              <div class="log-actions">
+                <button id="clear" class="btn btn-secondary">Clear</button>
+              </div>
             </div>
           </div>
         </section>
@@ -91,8 +111,14 @@
       </div>
       <div class="modal-body">
         <div class="field">
-          <label>Front API Token</label>
+          <div class="row" style="gap:6px; align-items:center;">
+            <label>Front API Token</label>
+            <span class="info-icon" data-tip="In Front: Settings → Developers → API tokens → Create a token with read access. Paste the token value here.">i</span>
+          </div>
           <input id="frontInput" class="input" type="password" placeholder="Front API Token" />
+        </div>
+        <div id="frontConfiguredMsg" class="helper" style="display:none; margin-top: 8px;">
+          A Front API token is already saved. To change it, delete it first.
         </div>
       </div>
       <div class="modal-footer">
@@ -113,14 +139,19 @@
       </div>
       <div class="modal-body">
         <div class="field">
-          <label>Paste full JSON</label>
+          <div class="row" style="gap:6px; align-items:center;">
+            <label>Paste full JSON</label>
+            <span class="info-icon" data-tip="In Google Cloud Console: enable Gmail API → Credentials → Create credentials → OAuth client ID → Desktop app. Download the credentials JSON and paste its entire content here.">i</span>
+          </div>
           <textarea id="googleInput" class="textarea" rows="8" placeholder='{"installed": { ... }}'></textarea>
+        </div>
+        <div id="googleConfiguredMsg" class="helper" style="display:none; margin-top: 8px;">
+          Google OAuth credentials are already saved. To change them, delete first.
         </div>
       </div>
       <div class="modal-footer">
         <div style="margin-right:auto; display:flex; gap:8px;">
           <button id="deleteGoogle" class="btn btn-danger">Delete Credentials</button>
-          <button id="deleteGoogleToken" class="btn btn-danger">Delete OAuth Token</button>
         </div>
         <button id="cancelGoogle" class="btn btn-secondary">Cancel</button>
         <button id="saveGoogle" class="btn btn-primary">Save</button>
@@ -128,13 +159,39 @@
     </div>
   </div>
 
+  <div id="modalGoogleToken" class="modal" role="dialog" aria-modal="true" aria-labelledby="modalGoogleTokenTitle">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <div id="modalGoogleTokenTitle" class="modal-title">Gmail OAuth Token</div>
+        <button id="closeGoogleToken" class="btn btn-secondary">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="field">
+          <div class="row" style="gap:6px; align-items:center;">
+            <label>Current Scopes</label>
+            <span class="info-icon" data-tip="The app creates this token during the first run via a browser flow. Delete it here to re‑authenticate or to change Gmail scopes.">i</span>
+          </div>
+          <div id="tokenScopes" class="helper">None</div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <div style="margin-right:auto; display:flex; gap:8px;">
+          <button id="deleteGoogleToken" class="btn btn-danger">Delete Gmail OAuth Token</button>
+        </div>
+        <button id="cancelGoogleToken" class="btn btn-secondary">Close</button>
+      </div>
+    </div>
+  </div>
+
   <script>
-    const runBtn = document.getElementById('run');
-    const cancelBtn = document.getElementById('cancel');
+    const runStopBtn = document.getElementById('runStop');
     const output = document.getElementById('output');
     const statusChip = document.getElementById('statusChip');
     const statusText = document.getElementById('statusText');
     const clearBtn = document.getElementById('clear');
+    const dryRunEl = document.getElementById('dryRun');
+    const dryRunToggle = document.getElementById('dryRunToggle');
+    const logLevelEl = document.getElementById('logLevel');
     const setStatus = (state, text) => { statusChip.className = 'chip ' + state; statusText.textContent = text; };
     clearBtn.addEventListener('click', () => { output.textContent = ''; });
     const toasts = document.getElementById('toasts');
@@ -155,19 +212,28 @@
     const statusFront = document.getElementById('statusFront');
     const statusGoogle = document.getElementById('statusGoogle');
     const statusGoogleToken = document.getElementById('statusGoogleToken');
+    const btnFront = document.getElementById('btnFront');
+    const btnGoogle = document.getElementById('btnGoogle');
+    const btnGoogleToken = document.getElementById('btnGoogleToken');
+
+    // Track secrets state for modal behavior
+    const secrets = { front: false, google: false, oauthExists: false, oauthScopes: [] };
     async function refreshSecretsStatus() {
       try {
         const s = await window.electronAPI.getSecretsStatus();
-        if (s.front) { statusFront.className = 'status-badge ok'; statusFront.textContent = 'Configured'; } else { statusFront.className = 'status-badge warn'; statusFront.textContent = 'Not configured'; }
-        if (s.google) { statusGoogle.className = 'status-badge ok'; statusGoogle.textContent = 'Configured'; } else { statusGoogle.className = 'status-badge warn'; statusGoogle.textContent = 'Not configured'; }
+        secrets.front = Boolean(s.front);
+        secrets.google = Boolean(s.google);
+        if (secrets.front) { statusFront.className = 'status-badge ok'; statusFront.textContent = 'Configured'; } else { statusFront.className = 'status-badge warn'; statusFront.textContent = 'Not configured'; }
+        if (secrets.google) { statusGoogle.className = 'status-badge ok'; statusGoogle.textContent = 'Configured'; } else { statusGoogle.className = 'status-badge warn'; statusGoogle.textContent = 'Not configured'; }
         // Token info
         try {
           const info = await window.electronAPI.getGoogleTokenInfo();
-          if (info.exists) {
+          secrets.oauthExists = Boolean(info.exists);
+          secrets.oauthScopes = Array.isArray(info.scopes) ? info.scopes : [];
+          if (secrets.oauthExists) {
             statusGoogleToken.className = 'status-badge ok';
-            const scopes = Array.isArray(info.scopes) ? info.scopes : [];
             // Shorten well-known scopes for readability
-            const short = scopes.map(s => {
+            const short = secrets.oauthScopes.map(s => {
               if (s.endsWith('/gmail.readonly')) return 'gmail.readonly';
               if (s.endsWith('/gmail.modify')) return 'gmail.modify';
               if (s.endsWith('/gmail.labels')) return 'gmail.labels';
@@ -179,6 +245,11 @@
             statusGoogleToken.textContent = 'None';
           }
         } catch {}
+
+        // Keep action buttons labeled as "Configure" regardless of state
+        btnFront.textContent = 'Configure';
+        btnGoogle.textContent = 'Configure';
+        btnGoogleToken.textContent = 'Configure';
       } catch {}
     }
     refreshSecretsStatus();
@@ -186,20 +257,80 @@
     // Modal helpers
     const modalFront = document.getElementById('modalFront');
     const modalGoogle = document.getElementById('modalGoogle');
+    const modalGoogleToken = document.getElementById('modalGoogleToken');
     const frontInput = document.getElementById('frontInput');
     const googleInput = document.getElementById('googleInput');
     const openModal = (el) => { el.classList.add('show'); };
     const closeModal = (el) => { el.classList.remove('show'); };
 
-    // Open modals
-    document.getElementById('btnFront').addEventListener('click', () => { frontInput.value = ''; openModal(modalFront); });
-    document.getElementById('btnGoogle').addEventListener('click', () => { googleInput.value = ''; openModal(modalGoogle); });
+    // Open modals (conditional modes)
+    const frontField = document.querySelector('#modalFront .modal-body .field');
+    const frontMsg = document.getElementById('frontConfiguredMsg');
+    const saveFrontBtn = document.getElementById('saveFront');
+    const deleteFrontBtn = document.getElementById('deleteFront');
+    btnFront.addEventListener('click', () => {
+      // Configure mode when missing; delete-only when present
+      if (secrets.front) {
+        // Delete-only mode
+        frontInput.value = '';
+        if (frontField) frontField.style.display = 'none';
+        if (frontMsg) frontMsg.style.display = '';
+        if (saveFrontBtn) saveFrontBtn.style.display = 'none';
+        if (deleteFrontBtn) deleteFrontBtn.style.display = '';
+      } else {
+        // Create mode
+        frontInput.value = '';
+        if (frontField) frontField.style.display = '';
+        if (frontMsg) frontMsg.style.display = 'none';
+        if (saveFrontBtn) saveFrontBtn.style.display = '';
+        if (deleteFrontBtn) deleteFrontBtn.style.display = 'none';
+      }
+      openModal(modalFront);
+    });
+
+    const googleField = document.querySelector('#modalGoogle .modal-body .field');
+    const googleMsg = document.getElementById('googleConfiguredMsg');
+    const saveGoogleBtn = document.getElementById('saveGoogle');
+    const deleteGoogleBtn = document.getElementById('deleteGoogle');
+    btnGoogle.addEventListener('click', () => {
+      if (secrets.google) {
+        // Delete-only mode
+        googleInput.value = '';
+        if (googleField) googleField.style.display = 'none';
+        if (googleMsg) googleMsg.style.display = '';
+        if (saveGoogleBtn) saveGoogleBtn.style.display = 'none';
+        if (deleteGoogleBtn) deleteGoogleBtn.style.display = '';
+      } else {
+        // Create mode
+        googleInput.value = '';
+        if (googleField) googleField.style.display = '';
+        if (googleMsg) googleMsg.style.display = 'none';
+        if (saveGoogleBtn) saveGoogleBtn.style.display = '';
+        if (deleteGoogleBtn) deleteGoogleBtn.style.display = 'none';
+      }
+      openModal(modalGoogle);
+    });
+
+    btnGoogleToken.addEventListener('click', () => {
+      // Only show delete button if token exists
+      const del = document.getElementById('deleteGoogleToken');
+      if (del) del.style.display = secrets.oauthExists ? '' : 'none';
+      // Update scopes text if we have them
+      const scopesEl = document.getElementById('tokenScopes');
+      if (scopesEl) {
+        const short = (secrets.oauthScopes || []).map(s => s.split('/').pop());
+        scopesEl.textContent = secrets.oauthExists ? (short.join(', ') || 'Present') : 'None';
+      }
+      openModal(modalGoogleToken);
+    });
 
     // Close buttons
     document.getElementById('closeFront').addEventListener('click', () => closeModal(modalFront));
     document.getElementById('cancelFront').addEventListener('click', () => closeModal(modalFront));
     document.getElementById('closeGoogle').addEventListener('click', () => closeModal(modalGoogle));
     document.getElementById('cancelGoogle').addEventListener('click', () => closeModal(modalGoogle));
+    document.getElementById('closeGoogleToken').addEventListener('click', () => closeModal(modalGoogleToken));
+    document.getElementById('cancelGoogleToken').addEventListener('click', () => closeModal(modalGoogleToken));
 
     // Save actions
     document.getElementById('saveFront').addEventListener('click', async () => {
@@ -216,7 +347,13 @@
       try {
         await window.electronAPI.deleteFrontToken();
         showToast('Front token deleted', 'success');
-        closeModal(modalFront);
+        // Switch modal into create mode and keep it open
+        if (frontField) frontField.style.display = '';
+        if (frontMsg) frontMsg.style.display = 'none';
+        if (saveFrontBtn) saveFrontBtn.style.display = '';
+        const deleteBtn = document.getElementById('deleteFront');
+        if (deleteBtn) deleteBtn.style.display = 'none';
+        if (frontInput) frontInput.focus();
         refreshSecretsStatus();
       } catch (e) { showToast('Failed to delete token', 'error'); }
     });
@@ -244,13 +381,24 @@
         await window.electronAPI.deleteGoogleToken();
         showToast('Google OAuth token deleted', 'success');
         refreshSecretsStatus();
+        // Keep modal open; update view
+        const del = document.getElementById('deleteGoogleToken');
+        if (del) del.style.display = 'none';
+        const scopesEl = document.getElementById('tokenScopes');
+        if (scopesEl) scopesEl.textContent = 'None';
       } catch (e) { showToast('Failed to delete token', 'error'); }
     });
     document.getElementById('deleteGoogle').addEventListener('click', async () => {
       try {
         await window.electronAPI.deleteGoogleCreds();
         showToast('Google credentials deleted', 'success');
-        closeModal(modalGoogle);
+        // Switch modal into create mode and keep it open
+        if (googleField) googleField.style.display = '';
+        if (googleMsg) googleMsg.style.display = 'none';
+        if (saveGoogleBtn) saveGoogleBtn.style.display = '';
+        const deleteBtn = document.getElementById('deleteGoogle');
+        if (deleteBtn) deleteBtn.style.display = 'none';
+        if (googleInput) googleInput.focus();
         refreshSecretsStatus();
       } catch (e) { showToast('Failed to delete credentials', 'error'); }
     });
@@ -260,11 +408,42 @@
       output.scrollTop = output.scrollHeight;
     };
 
-    runBtn.addEventListener('click', async () => {
+    let isRunning = false;
+    const setRunning = (running) => {
+      isRunning = running;
+      if (running) {
+        runStopBtn.textContent = 'Stop';
+        runStopBtn.className = 'btn btn-danger run-btn';
+        dryRunEl.disabled = true;
+        dryRunToggle.classList.add('disabled');
+        logLevelEl.disabled = true;
+        clearBtn.disabled = true;
+      } else {
+        runStopBtn.textContent = 'Run Migration';
+        runStopBtn.className = 'btn btn-primary run-btn';
+        dryRunEl.disabled = false;
+        dryRunToggle.classList.remove('disabled');
+        logLevelEl.disabled = false;
+        clearBtn.disabled = false;
+      }
+    };
+
+    // No chip display in simplified UI; settings affect next run.
+
+    runStopBtn.addEventListener('click', async () => {
+      // If already running, treat as Stop
+      if (isRunning) {
+        try { await window.electronAPI.cancelMigration(); } catch {}
+        setStatus('idle','Cancelled');
+        showToast('Migration cancelled', 'info');
+        setRunning(false);
+        return;
+      }
+
+      // Start a new run
       output.textContent = '';
-      runBtn.blur();
-      runBtn.disabled = true;
-      cancelBtn.disabled = false;
+      runStopBtn.blur();
+      setRunning(true);
       setStatus('running','Running');
       showToast('Migration started', 'info');
       try {
@@ -275,30 +454,21 @@
         window.electronAPI.onMigrationData(chunk => append(chunk));
         window.electronAPI.onMigrationEnd(({ code }) => {
           append('\n\n[Process exited with code ' + code + ']');
-          runBtn.disabled = false;
-          cancelBtn.disabled = true;
           const ok = code === 0;
           setStatus(ok ? 'success' : 'error', ok ? 'Completed' : 'Failed');
           showToast(ok ? 'Migration completed' : 'Migration failed', ok ? 'success' : 'error');
           // Update token indicator in case OAuth occurred
           refreshSecretsStatus();
+          setRunning(false);
         });
         window.electronAPI.onMigrationError(({ message }) => append('\n[Error] ' + message + '\n'));
         const opts = { dryRun: document.getElementById('dryRun').checked, logLevel: document.getElementById('logLevel').value, };
         await window.electronAPI.runMigration(opts);
       } catch (err) {
         append('\n[Failed] ' + (err?.message || err) + '\n');
-        runBtn.disabled = false;
-        cancelBtn.disabled = true;
         showToast('Migration failed to start', 'error');
+        setRunning(false);
       }
-    });
-
-    cancelBtn.addEventListener('click', async () => {
-      cancelBtn.disabled = true;
-      try { await window.electronAPI.cancelMigration(); } catch {}
-      setStatus('idle','Cancelled');
-      showToast('Migration cancelled', 'info');
     });
   </script>
 </body>

@@ -1,18 +1,24 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, nativeImage } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const { spawn } = require('child_process');
 
 let mainWindow = null;
 let currentChild = null;
+const roundedIconPath = path.join(__dirname, 'logo-rounded.png');
+const defaultIconPath = path.join(__dirname, 'logo.png');
+const iconPath = fs.existsSync(roundedIconPath) ? roundedIconPath : defaultIconPath;
 
 function createWindow() {
   const win = new BrowserWindow({
-    width: 1200,
-    height: 1040,
+    width: 960,
+    height: 828,
     minWidth: 960,
-    minHeight: 800,
+    minHeight: 828,
+    useContentSize: true,
     center: true,
     autoHideMenuBar: true,
+    icon: iconPath,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js')
     }
@@ -22,7 +28,16 @@ function createWindow() {
   mainWindow = win;
 }
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  // Set dock icon on macOS for dev runs
+  try {
+    if (process.platform === 'darwin' && app.dock) {
+      const img = nativeImage.createFromPath(iconPath);
+      if (!img.isEmpty()) app.dock.setIcon(img);
+    }
+  } catch {}
+  createWindow();
+});
 
 ipcMain.handle('save-secrets', async (event, { frontToken, googleCredentialsJson }) => {
   const store = require(path.join(__dirname, '..', 'dist', 'utils', 'secureStore.js'));
