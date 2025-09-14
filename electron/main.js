@@ -42,12 +42,20 @@ ipcMain.handle('save-secrets', async (event, { frontToken, googleCredentialsJson
   return { ok: true };
 });
 
-ipcMain.handle('run-migration', () => {
+ipcMain.handle('run-migration', (_event, opts = {}) => {
   return new Promise((resolve, reject) => {
     const script = path.join(__dirname, '..', 'dist', 'index.js');
+    const env = { ...process.env, ELECTRON_RUN_AS_NODE: '1' };
+    // Apply options
+    if (typeof opts.dryRun === 'boolean') {
+      env.DRY_RUN = String(opts.dryRun);
+    }
+    if (typeof opts.logLevel === 'string' && opts.logLevel) {
+      env.LOG_LEVEL = opts.logLevel;
+    }
     const child = spawn(process.execPath, [script], {
       cwd: path.join(__dirname, '..'),
-      env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+      env,
     });
     currentChild = child;
 

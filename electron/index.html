@@ -25,6 +25,18 @@
   <section>
     <button id="run">Run Migration</button>
     <button id="cancel" disabled>Stop</button>
+    <label style="margin-left: 12px;">
+      <input id="dryRun" type="checkbox" checked /> Dry Run
+    </label>
+    <label style="margin-left: 12px;">
+      Log Level:
+      <select id="logLevel">
+        <option value="error">error</option>
+        <option value="warn">warn</option>
+        <option value="info" selected>info</option>
+        <option value="debug">debug</option>
+      </select>
+    </label>
   </section>
   <pre id="output" style="white-space: pre-wrap; border: 1px solid #ccc; padding: 8px; height: 300px; overflow: auto;"></pre>
   <script>
@@ -65,7 +77,8 @@
           cancelBtn.disabled = true;
         });
         window.electronAPI.onMigrationError(({ message }) => append('\n[Error] ' + message + '\n'));
-        await window.electronAPI.runMigration();
+        const opts = { dryRun: document.getElementById('dryRun').checked, logLevel: document.getElementById('logLevel').value, };
+        await window.electronAPI.runMigration(opts);
       } catch (err) {
         append('\n[Failed] ' + (err?.message || err) + '\n');
         runBtn.disabled = false;
