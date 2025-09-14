@@ -5,6 +5,7 @@ import { ConversationMapper, MigrationItem, STATUS_LABEL_ARCHIVED, STATUS_LABEL_
 import { Logger } from './utils/logger_ascii';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import * as readline from 'readline';
 
 interface MigrationStats {
   total: number;
@@ -358,23 +359,10 @@ async function main() {
   console.log('=============================\n');
 
   try {
-    // Check for credentials file
+    await ensureInteractiveSetup();
+
+    // Load final config after setup
     const config = loadConfig();
-    try {
-      await fs.access(config.google.credentialsPath);
-    } catch {
-      console.error(`\nError: Google credentials file not found at ${config.google.credentialsPath}`);
-      console.error('\nTo set up Gmail API access:');
-      console.error('1. Go to https://console.cloud.google.com/');
-      console.error('2. Create a new project or select existing');
-      console.error('3. Enable the Gmail API');
-      console.error('4. Create OAuth 2.0 credentials (Desktop application)');
-      console.error('5. Download the credentials.json file');
-      console.error(`6. Place it at ${config.google.credentialsPath}`);
-      console.error('\nFor detailed instructions, see:');
-      console.error('https://developers.google.com/gmail/api/quickstart/nodejs');
-      process.exit(1);
-    }
 
     const migrator = new FrontToGmailMigrator();
     await migrator.run();
@@ -390,4 +378,90 @@ async function main() {
 // Run if this is the main module
 if (require.main === module) {
   main();
+}
+
+// --------------- Interactive Setup Helpers ---------------
+async function ensureInteractiveSetup() {
+  // 1) Front API token: try env, then front_token.json, else prompt
+  if (!process.env.FRONT_API_KEY) {
+    const frontTokenPath = path.resolve(process.cwd(), 'front_token.json');
+    const token = await readFrontToken(frontTokenPath);
+    if (token) {
+      process.env.FRONT_API_KEY = token;
+    } else {
+      const entered = await prompt(`Enter your Front API token (read-only): `);
+      if (!entered || !entered.trim()) {
+        throw new Error('Front API token is required to proceed.');
+      }
+      process.env.FRONT_API_KEY = entered.trim();
+      await fs.writeFile(frontTokenPath, JSON.stringify({ token: process.env.FRONT_API_KEY }, null, 2), 'utf8');
+      console.log(`[INFO] Saved Front token to ${frontTokenPath}`);
+    }
+  }
+
+  // 2) Google credentials: if missing, prompt to paste JSON and write file
+  const credsPath = process.env.GOOGLE_CREDENTIALS_PATH || './credentials.json';
+  const absCredsPath = path.isAbsolute(credsPath) ? credsPath : path.resolve(process.cwd(), credsPath);
+  const exists = await fileExists(absCredsPath);
+  if (!exists) {
+    console.log('Google credentials file not found.');
+    console.log('Paste your OAuth 2.0 credentials JSON (Desktop application) below, then press Enter:');
+    const json = await promptMultiline('JSON> ');
+    let parsed: any;
+    try {
+      parsed = JSON.parse(json);
+      if (!parsed?.installed?.client_id || !parsed?.installed?.client_secret || !parsed?.installed?.redirect_uris) {
+        throw new Error('Invalid credentials: expected installed.client_id/client_secret/redirect_uris');
+      }
+    } catch (e) {
+      throw new Error(`Invalid JSON for Google credentials: ${(e as Error).message}`);
+    }
+    await fs.writeFile(absCredsPath, JSON.stringify(parsed, null, 2), 'utf8');
+    console.log(`[INFO] Wrote Google credentials to ${absCredsPath}`);
+  }
+}
+
+async function readFrontToken(filePath: string): Promise<string | null> {
+  try {
+    const data = await fs.readFile(filePath, 'utf8');
+    const json = JSON.parse(data);
+    return typeof json?.token === 'string' ? json.token : null;
+  } catch {
+    return null;
+  }
+}
+
+async function fileExists(p: string): Promise<boolean> {
+  try {
+    await fs.access(p);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function prompt(question: string): Promise<string> {
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  return new Promise(resolve => rl.question(question, answer => { rl.close(); resolve(answer); }));
+}
+
+function promptMultiline(promptText: string): Promise<string> {
+  // Simple one-line read that accepts full JSON on a single line; if users paste multi-line,
+  // many terminals will still deliver it; we capture until an empty line.
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  const lines: string[] = [];
+  console.log('(Finish input with an empty line)');
+  rl.setPrompt(promptText);
+  rl.prompt();
+  return new Promise(resolve => {
+    rl.on('line', (line) => {
+      if (line.trim() === '') {
+        rl.close();
+      } else {
+        lines.push(line);
+        rl.prompt();
+      }
+    });
+    rl.on('close', () => resolve(lines.join('\n')));
+  });
 }
