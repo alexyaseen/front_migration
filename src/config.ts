@@ -44,7 +44,7 @@ export function loadConfig(): Config {
     },
     migration: {
       batchSize: parseInt(process.env.BATCH_SIZE || '10', 10),
-      dryRun: process.env.DRY_RUN === 'true',
+      dryRun: process.env.DRY_RUN !== 'false',
       logLevel: getLogLevel(process.env.LOG_LEVEL),
       skipArchived: process.env.SKIP_ARCHIVED === 'true',
       inboxId: process.env.FRONT_INBOX_ID,
