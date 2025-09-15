@@ -562,8 +562,10 @@
     // No chip display in simplified UI; settings affect next run.
 
     runStopBtn.addEventListener('click', async () => {
-      // If already running, treat as Stop
+      // If already running, confirm Stop
       if (isRunning) {
+        const ok = window.confirm('Stop the current migration? This will cancel the run in progress.');
+        if (!ok) return;
         try { await window.electronAPI.cancelMigration(); } catch {}
         setStatus('idle','Cancelled');
         showToast('Migration cancelled', 'info');

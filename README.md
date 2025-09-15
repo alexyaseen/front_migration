@@ -75,32 +75,18 @@ FRONT_INBOX_ID=            # Optional: migrate only a specific Front inbox
 
 ## Usage
 
-### Test Run (Dry Run)
+This tool now runs via the Electron app (no CLI run path).
 
-Run a dry run to preview changes:
-
-```bash
-npm run migrate
-```
-
-This will:
-1. Authenticate with Gmail (first run prompts for credentials and saves the token to your system keychain)
-2. Fetch conversations from Front
-3. Show what labels would be created (without creating them)
-4. Show what messages would be updated
-5. NOT make any actual changes
-6. Produce a CSV report in `./reports`
-
-### Actual Migration
-
-When satisfied with the dry run (the tool defaults to dry run mode if `DRY_RUN` is omitted):
-
-1. Set `DRY_RUN=false` in `.env`
-2. Run the migration:
+- Start the app in development:
 
 ```bash
-npm run migrate
+npm run electron
 ```
+
+In the app:
+- Configure secrets under Authentication (Front token and Google credentials stored in your OS keychain).
+- Choose run options (Dry Run, Log Detail, optional Front Inbox).
+- Click “Run Migration” to simulate or apply changes. A CSV report is written and can be opened from the UI.
 
 ## How It Works
 
@@ -159,15 +145,114 @@ You can filter this file to audit changes or spot-check ambiguous/skipped items.
 ## Development
 
 ```bash
-# Run in development mode
-npm run dev
-
-# Build TypeScript
+# Build TypeScript (Electron loads from dist/)
 npm run build
 
-# Run compiled version
-npm start
+# Launch the Electron app (builds first)
+npm run electron
 ```
+
+## Packaging (Electron)
+
+The Electron UI can be packaged into platform-specific binaries using electron-builder.
+
+Prerequisites:
+- Install dev deps: `npm install` (ensures electron-builder is installed)
+
+Build commands:
+- macOS: `npm run dist:mac`
+- Windows: `npm run dist:win`
+- Linux: `npm run dist:linux`
+- All platforms from current OS: `npm run dist`
+
+Notes:
+- Packaging runs `npm run build` first to compile TypeScript to `dist/`.
+- Reports are saved to the app’s user data directory when packaged (visible via “Open Reports” in the UI).
+- Code signing is not configured; generated artifacts are unsigned developer builds unless you add signing configuration.
+
+### macOS Icon (squircle)
+
+macOS does not auto-mask app icons; design your icon within a rounded “squircle” shape and keep the corners transparent. Two helpers are included:
+
+Requirements:
+- macOS with Xcode command line tools (`xcode-select --install`)
+- ImageMagick for the squircle helper (`brew install imagemagick`)
+
+1) Create a squircle-masked PNG (approximation) from your square art:
+
+```bash
+# From electron/logo.png → electron/logo-squircle.png (1024x1024)
+bash scripts/make-squircle.sh
+
+# Or specify input/output/size
+bash scripts/make-squircle.sh input.png electron/logo-squircle.png 1024
+```
+
+2) Generate the .icns that macOS uses:
+
+```bash
+# From electron/logo-squircle.png → electron/icon.icns
+bash scripts/make-icns.sh electron/logo-squircle.png electron/icon.icns
+```
+
+The build config points macOS to `electron/icon.icns`. If you update the icon, regenerate `.icns` and rebuild.
+
+Advanced options (squircle helper):
+- `SQUIRCLE_EXP` (default `5`): superellipse exponent. Higher = slightly squarer sides; lower = softer corners.
+- `SQUIRCLE_AA` (no default): optional edge blur (e.g., `0.5`) to feather the mask.
+- `SQUIRCLE_INNER` (default `0`): set to `1` to add a subtle inner shadow.
+- `SQUIRCLE_INSET` (default `~6%` of size): inner shadow inset in pixels.
+- `SQUIRCLE_ALPHA` (default `22`): inner shadow opacity 0–100.
+
+Examples:
+```bash
+# Softer corners and slight feathering
+SQUIRCLE_EXP=4 SQUIRCLE_AA=0.5 bash scripts/make-squircle.sh
+
+# Enable a subtle inner shadow
+SQUIRCLE_INNER=1 SQUIRCLE_ALPHA=18 SQUIRCLE_INSET=56 bash scripts/make-squircle.sh
+```
+
+### Signing & Notarization (macOS)
+
+For distribution on macOS, sign and notarize to avoid Gatekeeper warnings.
+
+1) Requirements
+- Apple Developer account and a “Developer ID Application” certificate in your Keychain.
+- Xcode command line tools installed.
+
+2) Hardened runtime and entitlements
+- Already configured in `package.json` build: hardened runtime enabled with entitlements at `electron/entitlements.mac.plist` and `electron/entitlements.mac.inherit.plist`.
+
+3) Notarization credentials (choose one)
+- App Store Connect API key (recommended):
+  - Set env vars before running build:
+    - `ASC_KEY_ID` – Key ID
+    - `ASC_ISSUER_ID` – Issuer ID
+    - `ASC_KEY_FILE` – Path to the `.p8` key file
+- OR Apple ID + App-Specific Password:
+  - `APPLE_ID` – your Apple ID email
+  - `APPLE_APP_SPECIFIC_PASSWORD` – app-specific password for notarization
+  - Optional: `APPLE_TEAM_ID`
+
+4) Build
+
+```bash
+# Example with API key
+ASC_KEY_ID=... ASC_ISSUER_ID=... ASC_KEY_FILE=/path/to/AuthKey.p8 npm run dist:mac
+
+# Or with Apple ID + app-specific password
+APPLE_ID=you@example.com APPLE_APP_SPECIFIC_PASSWORD=abcd-efgh-ijkl-mnop npm run dist:mac
+```
+
+Notes:
+- Set `MAC_NOTARIZE=false` to skip notarization during local builds.
+- You can keep using `electron/logo.png` as the icon; native `.icns/.ico` can be added later for best quality.
+
+## App Behavior
+
+- Closing the window (red X) quits the app. If a migration run is in progress, you’ll be prompted to confirm; confirming stops the run and quits.
+- Cmd+Q or Quit from the menu behaves the same: prompts if a run is active, then stops and quits on confirmation.
 
 ## Important Notes
 

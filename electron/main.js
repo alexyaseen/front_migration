@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, nativeImage, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, nativeImage, shell, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
@@ -6,9 +6,13 @@ const { pathToFileURL } = require('url');
 
 let mainWindow = null;
 let currentChild = null;
+let isQuitting = false;
+const macIcnsPath = path.join(__dirname, 'icon.icns');
 const roundedIconPath = path.join(__dirname, 'logo-rounded.png');
 const defaultIconPath = path.join(__dirname, 'logo.png');
-const iconPath = fs.existsSync(roundedIconPath) ? roundedIconPath : defaultIconPath;
+const iconPath = (process.platform === 'darwin' && fs.existsSync(macIcnsPath))
+  ? macIcnsPath
+  : (fs.existsSync(roundedIconPath) ? roundedIconPath : defaultIconPath);
 
 function getReportsDir() {
   try {
@@ -36,6 +40,37 @@ function createWindow() {
 
   win.loadFile(path.join(__dirname, 'index.html'));
   mainWindow = win;
+
+  // When the user clicks the window close (red X), quit the app.
+  // If a migration is running, confirm and cancel it first.
+  win.on('close', async (e) => {
+    if (isQuitting) return; // allow default close on actual quit
+    e.preventDefault();
+
+    if (currentChild) {
+      const result = await dialog.showMessageBox(win, {
+        type: 'warning',
+        buttons: ['Cancel', 'Quit and Stop'],
+        defaultId: 0,
+        cancelId: 0,
+        title: 'Migration in progress',
+        message: 'A migration run is currently in progress.',
+        detail: 'Closing will stop the migration and quit the app. Do you want to proceed?',
+        noLink: true,
+      });
+      if (result.response !== 1) {
+        return; // keep running
+      }
+      // Stop child and quit
+      try { currentChild.kill('SIGTERM'); } catch {}
+      await waitForChildExit(5000).catch(() => {
+        try { currentChild.kill('SIGKILL'); } catch {}
+      });
+    }
+
+    isQuitting = true;
+    app.quit();
+  });
 }
 
 app.whenReady().then(() => {
@@ -47,6 +82,33 @@ app.whenReady().then(() => {
     }
   } catch {}
   createWindow();
+});
+
+// Intercept Cmd+Q / app quit to warn if a run is in progress
+app.on('before-quit', async (e) => {
+  if (isQuitting) return;
+  if (currentChild) {
+    e.preventDefault();
+    try {
+      const win = mainWindow || BrowserWindow.getAllWindows()[0] || null;
+      const result = await dialog.showMessageBox(win || undefined, {
+        type: 'warning',
+        buttons: ['Cancel', 'Quit and Stop'],
+        defaultId: 0,
+        cancelId: 0,
+        title: 'Migration in progress',
+        message: 'A migration run is currently in progress.',
+        detail: 'Quitting will stop the migration and close the app. Do you want to proceed?',
+        noLink: true,
+      });
+      if (result.response !== 1) {
+        return; // abort quit
+      }
+      try { currentChild.kill('SIGTERM'); } catch {}
+      await waitForChildExit(5000).catch(() => { try { currentChild.kill('SIGKILL'); } catch {} });
+    } catch {}
+  }
+  isQuitting = true;
 });
 
 ipcMain.handle('save-secrets', async (event, { frontToken, googleCredentialsJson }) => {
@@ -240,7 +302,27 @@ ipcMain.handle('open-external', async (_e, url) => {
 });
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit();
-  }
+  // We choose to quit on all platforms when the window is closed.
+  app.quit();
 });
+
+function waitForChildExit(timeoutMs = 5000) {
+  return new Promise((resolve, reject) => {
+    if (!currentChild) return resolve();
+    let done = false;
+    const onExit = () => {
+      if (done) return;
+      done = true;
+      currentChild = null;
+      resolve();
+    };
+    const t = setTimeout(() => {
+      if (done) return;
+      done = true;
+      reject(new Error('Timeout waiting for child to exit'));
+    }, timeoutMs);
+    currentChild.once('exit', () => { clearTimeout(t); onExit(); });
+    currentChild.once('close', () => { clearTimeout(t); onExit(); });
+    currentChild.once('error', () => { clearTimeout(t); onExit(); });
+  });
+}
