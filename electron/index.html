@@ -125,7 +125,14 @@
         <div class="field">
           <div class="row" style="gap:6px; align-items:center;">
             <label>Front API Token</label>
-            <span class="info-icon" data-tip="In Front: Settings → Developers → API tokens → Create a token with read access. Paste the token value here.">i</span>
+            <span id="frontTooltip" class="info-icon with-bubble" tabindex="0" role="img" aria-label="Help about Front API token">
+              i
+              <div class="tip-bubble">
+                <div>In Front: Settings → Developers → API tokens → Generate a token.</div>
+                <div>Read access is sufficient (conversations, messages, inboxes, tags).</div>
+                <div class="tip-url">https://app.frontapp.com/settings/developers</div>
+              </div>
+            </span>
           </div>
           <input id="frontInput" class="input" type="password" placeholder="Front API Token" />
         </div>
@@ -404,7 +411,7 @@
       openModal(modalGoogleToken);
     });
 
-    // No click navigation; URL is shown in tooltip for reference
+    // No click navigation; URL is shown in tooltip for reference (Google)
     const tipUrlEl = document.querySelector('#gcTooltip .tip-url');
     if (tipUrlEl) {
       const openCreds = async () => {
@@ -421,6 +428,25 @@
       tipUrlEl.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); openCreds(); } });
       tipUrlEl.setAttribute('aria-label', 'Open Google Cloud Console Credentials');
     }
+
+    // Front token helper link
+    const frontUrls = document.querySelectorAll('#frontTooltip .tip-url');
+    frontUrls.forEach((el) => {
+      const url = el.textContent.trim();
+      const open = async () => {
+        try {
+          const res = await window.electronAPI.openExternal(url);
+          if (!res?.ok) throw new Error(res?.error || 'Failed to open');
+        } catch (e) {
+          showToast('Could not open Front settings', 'error');
+        }
+      };
+      el.addEventListener('click', (e) => { e.preventDefault(); open(); });
+      el.setAttribute('tabindex', '0');
+      el.setAttribute('role', 'link');
+      el.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); open(); } });
+      el.setAttribute('aria-label', 'Open Front settings');
+    });
 
     // Close buttons
     document.getElementById('closeFront').addEventListener('click', () => closeModal(modalFront));
