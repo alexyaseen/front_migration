@@ -12,7 +12,12 @@
     "dist:win": "npm run build && npm prune --production && npx electron-builder --win",
     "dist:linux": "npm run build && npm prune --production && npx electron-builder --linux"
   },
-  "keywords": ["front", "gmail", "migration", "email"],
+  "keywords": [
+    "front",
+    "gmail",
+    "migration",
+    "email"
+  ],
   "author": "",
   "license": "MIT",
   "dependencies": {
@@ -27,7 +32,7 @@
     "@types/node": "^22.10.2",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
-    "electron": "^38.1.0",
+    "electron": "38.1.0",
     "electron-builder": "^24.6.0",
     "@electron/notarize": "^2.3.0"
   },
@@ -45,22 +50,30 @@
     "asar": true,
     "mac": {
       "category": "public.app-category.productivity",
-      "target": ["dmg", "zip"],
+      "target": [
+        "dmg",
+        "zip"
+      ],
       "icon": "electron/icon.icns",
       "hardenedRuntime": true,
       "entitlements": "electron/entitlements.mac.plist",
       "entitlementsInherit": "electron/entitlements.mac.inherit.plist"
     },
     "win": {
-      "target": ["nsis"],
+      "target": [
+        "nsis"
+      ],
       "icon": "electron/logo.png"
     },
     "linux": {
-      "target": ["AppImage"],
+      "target": [
+        "AppImage"
+      ],
       "category": "Utility",
       "icon": "electron/logo.png"
     },
     "afterSign": "scripts/notarize.js",
-    "afterAllArtifactBuild": "scripts/staple.js"
+    "afterAllArtifactBuild": "scripts/staple.js",
+    "electronVersion": "38.1.0"
   }
 }
