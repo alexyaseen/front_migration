@@ -6,11 +6,11 @@
   "scripts": {
     "build": "tsc",
     "electron": "npm run build && npx electron electron/main.js",
-    "pack": "npm run build && electron-builder --dir",
-    "dist": "npm run build && electron-builder",
-    "dist:mac": "npm run build && electron-builder --mac",
-    "dist:win": "npm run build && electron-builder --win",
-    "dist:linux": "npm run build && electron-builder --linux"
+    "pack": "npm run build && npm prune --production && npx electron-builder --dir",
+    "dist": "npm run build && npm prune --production && npx electron-builder",
+    "dist:mac": "npm run build && npm prune --production && npx electron-builder --mac",
+    "dist:win": "npm run build && npm prune --production && npx electron-builder --win",
+    "dist:linux": "npm run build && npm prune --production && npx electron-builder --linux"
   },
   "keywords": ["front", "gmail", "migration", "email"],
   "author": "",
@@ -37,8 +37,7 @@
     "files": [
       "dist/**",
       "electron/**",
-      "package.json",
-      "node_modules/**"
+      "package.json"
     ],
     "directories": {
       "buildResources": "electron"
