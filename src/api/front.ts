@@ -78,6 +78,13 @@ export class FrontClient {
         lastError = err;
         attempt++;
         if (attempt >= maxAttempts || !this.isRetriableError(err)) {
+          const status = err?.response?.status;
+          if (status === 401) {
+            const msg = err?.response?.data?._error?.message || 'Unauthorized';
+            const e = new Error(`FRONT_AUTH_401: ${msg}`);
+            (e as any).cause = err;
+            throw e;
+          }
           throw err;
         }
         const delay = baseDelayMs * Math.pow(2, attempt - 1) + Math.floor(Math.random() * 100);

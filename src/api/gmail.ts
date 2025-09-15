@@ -63,6 +63,14 @@ export class GmailClient {
         lastError = err;
         attempt++;
         if (attempt >= maxAttempts || !this.isRetriableError(err)) {
+          const status = err?.code || err?.response?.status;
+          const reason = Array.isArray(err?.errors) ? err.errors[0]?.reason : (err?.response?.data?.error?.errors?.[0]?.reason);
+          const msg = err?.message || err?.response?.data?.error?.message;
+          if (status === 401 || reason === 'authError' || /invalid[_-]?grant|unauthorized/i.test(String(msg))) {
+            const e = new Error(`GOOGLE_AUTH_401: ${msg || 'Unauthorized'}`);
+            (e as any).cause = err;
+            throw e;
+          }
           throw err;
         }
         const delay = baseDelayMs * Math.pow(2, attempt - 1) + Math.floor(Math.random() * 100);

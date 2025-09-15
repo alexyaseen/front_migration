@@ -589,7 +589,20 @@
           append('\n\n[Process exited with code ' + code + ']');
           const ok = code === 0;
           setStatus(ok ? 'success' : 'error', ok ? 'Completed' : 'Failed');
-          showToast(ok ? 'Migration completed' : 'Migration failed', ok ? 'success' : 'error');
+          if (ok) {
+            showToast('Migration completed', 'success');
+          } else {
+            const text = output.textContent || '';
+            if (text.includes('[FRONT AUTH ERROR]')) {
+              showToast('Front API token is invalid. Reconfigure in Authentication.', 'error');
+            } else if (text.includes('[GOOGLE AUTH ERROR]') || text.includes('[GOOGLE CREDS MISSING]')) {
+              showToast('Google authentication failed. Check credentials/token in Authentication.', 'error');
+            } else if (text.includes('[FRONT AUTH MISSING]')) {
+              showToast('Front API token missing. Configure it in Authentication.', 'error');
+            } else {
+              showToast('Migration failed', 'error');
+            }
+          }
           // Update token indicator in case OAuth occurred
           refreshSecretsStatus();
           setRunning(false);

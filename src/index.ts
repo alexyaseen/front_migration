@@ -385,6 +385,20 @@ async function main() {
   } catch (error) {
     console.error('\nMigration failed with error:');
     console.error(error);
+    const msg = (error as any)?.message || '';
+    if (msg.startsWith('FRONT_AUTH_401')) {
+      console.error('\n[FRONT AUTH ERROR] Your Front API token appears invalid (401 Unauthorized).');
+      console.error('Open the app → Authentication → Front API Token and reconfigure it.');
+    } else if (msg.startsWith('GOOGLE_AUTH_401')) {
+      console.error('\n[GOOGLE AUTH ERROR] Gmail authentication failed.');
+      console.error('In the app → Authentication:');
+      console.error('- Ensure Google Credentials are configured.');
+      console.error('- If issues persist, delete the Gmail OAuth token and re-authenticate on next run.');
+    } else if (/Front API token not found/i.test(msg)) {
+      console.error('\n[FRONT AUTH MISSING] No Front API token found. Configure it in the app under Authentication.');
+    } else if (/Google OAuth credentials not found/i.test(msg)) {
+      console.error('\n[GOOGLE CREDS MISSING] Google OAuth credentials not found. Configure them in the app under Authentication.');
+    }
     process.exit(1);
   }
 }
@@ -397,13 +411,13 @@ if (require.main === module) {
 // --------------- Interactive Setup Helpers ---------------
 async function ensureInteractiveSetup() {
   const store = new SecureStore();
-  // 1) Front API token: try env, then keychain, else hard fail
-  if (!process.env.FRONT_API_KEY) {
+  // 1) Front API token: prefer keychain; fall back to env if explicitly set
+  {
     const saved = await store.getFrontToken();
     if (saved) {
       process.env.FRONT_API_KEY = saved;
-    } else {
-      throw new Error('FRONT_API_KEY is not set and no token found in keychain. Use the Electron UI to save secrets or set FRONT_API_KEY in the environment.');
+    } else if (!process.env.FRONT_API_KEY) {
+      throw new Error('Front API token not found. Use the Electron UI to save the token, then try again.');
     }
   }
 

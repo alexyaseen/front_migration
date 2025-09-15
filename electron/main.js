@@ -201,6 +201,8 @@ ipcMain.handle('run-migration', (_event, opts = {}) => {
     const reportsDir = getReportsDir();
     try { fs.mkdirSync(reportsDir, { recursive: true }); } catch {}
     env.REPORTS_DIR = reportsDir;
+    // Always prefer keychain-stored secrets in child; drop any inherited FRONT_API_KEY
+    if (env.FRONT_API_KEY) delete env.FRONT_API_KEY;
     // Apply options
     if (typeof opts.dryRun === 'boolean') {
       env.DRY_RUN = String(opts.dryRun);
