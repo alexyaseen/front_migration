@@ -211,10 +211,10 @@ ipcMain.handle('run-migration', (_event, opts = {}) => {
     if (typeof opts.frontInboxId === 'string') {
       if (opts.frontInboxId) env.FRONT_INBOX_ID = opts.frontInboxId; else delete env.FRONT_INBOX_ID;
     }
-    const child = spawn(process.execPath, [script], {
-      cwd: path.join(__dirname, '..'),
-      env,
-    });
+    // In packaged apps, __dirname/.. resolves inside app.asar (a file),
+    // which is not a valid cwd and causes ENOTDIR. Use resourcesPath.
+    const safeCwd = process.resourcesPath || process.cwd();
+    const child = spawn(process.execPath, [script], { cwd: safeCwd, env });
     currentChild = child;
 
     child.stdout.on('data', data => {
