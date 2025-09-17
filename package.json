@@ -4,13 +4,13 @@
   "description": "Migration script to sync Front labels and archive status to Gmail",
   "main": "electron/main.js",
   "scripts": {
-    "build": "tsc",
+    "build": "node scripts/clean-dist.js && tsc",
     "electron": "npm run build && npx electron electron/main.js",
-    "pack": "npm run build && npm prune --production && npx electron-builder --dir",
-    "dist": "npm run build && npm prune --production && npx electron-builder",
-    "dist:mac": "npm run build && npm prune --production && npx electron-builder --mac",
-    "dist:win": "npm run build && npm prune --production && npx electron-builder --win",
-    "dist:linux": "npm run build && npm prune --production && npx electron-builder --linux"
+    "pack": "npm run build && npx electron-builder --dir",
+    "dist": "npm run build && npx electron-builder",
+    "dist:mac": "npm run build && npx electron-builder --mac",
+    "dist:win": "npm run build && npx electron-builder --win",
+    "dist:linux": "npm run build && npx electron-builder --linux"
   },
   "keywords": [
     "front",
@@ -45,7 +45,8 @@
       "package.json"
     ],
     "directories": {
-      "buildResources": "electron"
+      "buildResources": "electron",
+      "output": "release"
     },
     "asar": true,
     "mac": {
@@ -72,6 +73,7 @@
       "category": "Utility",
       "icon": "electron/logo.png"
     },
+    "afterPack": "scripts/prune-app.js",
     "afterSign": "scripts/notarize.js",
     "afterAllArtifactBuild": "scripts/staple.js",
     "electronVersion": "38.1.0"
