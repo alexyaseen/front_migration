@@ -88,6 +88,15 @@ In the app:
 - Choose run options (Dry Run, Log Detail, optional Front Inbox).
 - Click “Run Migration” to simulate or apply changes. A CSV report is written and can be opened from the UI.
 
+## Documentation
+
+- [Architecture overview](docs/architecture.md)
+- [Data flow walkthrough](docs/data-flow.md)
+- [Authentication & secret storage](docs/auth.md)
+- [Electron UI notes](docs/electron-ui.md)
+- [CSV reporting reference](docs/reports.md)
+- [Build & release guide](docs/build-and-release.md)
+
 ## How It Works
 
 ### Label Mapping
